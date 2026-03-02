@@ -1,0 +1,11 @@
+{
+  "WAS_IP": "192.168.2.21",
+  "WAS_PORT": 15113,
+  "PLC_TAGS": [
+    "ns=2;s=Channel2.Device2.D1001",
+    "ns=2;s=Channel2.Device2.D1002",
+    "ns=2;s=Channel2.Device2.D1003",
+    "ns=2;s=Channel2.Device2.D1004",
+    "ns=2;s=Channel2.Device2.D1005"
+  ]
+}
