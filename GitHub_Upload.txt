@@ -1,0 +1,97 @@
+VS Code로 만든 Python 프로젝트를 GitHub에 올리는 방법을 처음부터 끝까지 정리해 줄게 👍
+(Windows 기준, VS Code 사용)
+
+✅ 1️⃣ 준비물
+
+GitHub 계정 (https://github.com
+ 가입)
+
+PC에 Git 설치
+
+VS Code 설치
+
+✅ 2️⃣ Git 설치 확인
+
+VS Code 터미널 열기
+
+Ctrl + `
+
+아래 입력:
+
+git --version
+
+버전 나오면 OK
+안 나오면 👉 https://git-scm.com
+ 에서 설치
+
+ ✅ 3️⃣ GitHub에서 새 저장소 만들기
+
+GitHub 로그인
+
+오른쪽 상단 + 클릭
+
+New repository
+
+Repository name 입력 (예: plc_project)
+
+Public 또는 Private 선택
+
+Create repository
+
+👉 그러면 주소가 생김
+예:
+
+https://github.com/아이디/plc_project.git
+
+이 주소 복사해둬
+
+✅ 4️⃣ VS Code에서 프로젝트 Git 초기화
+
+프로젝트 폴더 열기 후 터미널에서:
+
+git init
+✅ 5️⃣ .gitignore 만들기 (중요)
+
+프로젝트 루트에 .gitignore 파일 만들고 아래 추가:
+
+__pycache__/
+*.pyc
+venv/
+.env
+
+(가상환경은 보통 올리지 않음)
+
+✅ 6️⃣ 파일 추가
+git add .
+✅ 7️⃣ 커밋
+git commit -m "first commit"
+✅ 8️⃣ GitHub 저장소 연결
+git remote add origin https://github.com/아이디/plc_project.git
+✅ 9️⃣ 업로드 (Push)
+git branch -M main
+git push -u origin main
+
+처음이면 GitHub 로그인 창 뜰 수 있음
+토큰 방식 로그인 요구할 수도 있음
+
+🎉 완료!
+
+GitHub 새로고침하면 코드 올라가 있음
+
+🎯 핵심 정리
+
+처음 업로드는 이 6줄이면 끝:
+
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin 저장소주소
+git branch -M main
+git push -u origin main
+
+requirements.txt 만들기
+pip freeze > requirements.txt
+
+👉 다른 사람이 설치할 때
+
+pip install -r requirements.txt
