@@ -19,3 +19,14 @@ def api():
     return result
   except Exception as e:
                 logger.error(f"API route fatal error: {e}")
+                
+@router.get('/api')
+def health():
+  try:
+    data = "model.model_dump()"
+
+    result = data
+
+    return result
+  except Exception as e:
+                logger.error(f"API route fatal error: {e}")
