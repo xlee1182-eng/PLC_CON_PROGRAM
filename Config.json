@@ -15,7 +15,7 @@
       ]
     },
     "MITSUBISHI":{
-      "USEYN": "Y",
+      "USEYN": "N",
       "NAME": "MITSU_PLC_1",
       "IP": "192.168.2.210",
       "PORT": 3000,
@@ -23,6 +23,19 @@
         "D1001",
         "D1002",
         "D1003"
+      ]
+    },
+    "OPCDA":{
+      "USEYN": "Y",
+      "NAME": "OPCDA_PLC_1",
+      "IP": "localhost",
+      "PORT": 0,
+      "PROG_ID_old": "Takebishi.Melsec.1",
+      "PROG_ID": "Kepware.KEPServerEX.V6",
+      "TAGS": [
+        "Channel1.Device1.D1001",
+        "Channel1.Device1.D1002",
+        "Channel1.Device1.D1003"
       ]
     }
   }
