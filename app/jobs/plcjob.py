@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, Request
+# from fastapi import APIRouter, Request
 from app.plc_drivers.opcua_async import AsyncOPCUAPLC
 from app.plc_drivers.mitsubishi_async import AsyncMitsubishiPLC
 from app.plc_ctl.plc_manager import AsyncPLCManager
