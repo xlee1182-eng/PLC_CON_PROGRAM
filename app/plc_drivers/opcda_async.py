@@ -1,19 +1,21 @@
 import asyncio
+from importlib import import_module
 from app.plc_ctl.base_plc import BaseAsyncPLC
 from app.plc_ctl.reconnect import backoff_retry
 from loguru import logger
 
-try:
-    import OpenOPC
-    HAS_OPENOPC = True
-except Exception:
-    HAS_OPENOPC = False
 
-try:
-    import win32com.client as win32
-    HAS_WIN32 = True
-except Exception:
-    HAS_WIN32 = False
+def _optional_import(module_name):
+    try:
+        return import_module(module_name)
+    except Exception:
+        return None
+
+
+_OPENOPC = _optional_import("OpenOPC")
+_WIN32_CLIENT = _optional_import("win32com.client")
+HAS_OPENOPC = _OPENOPC is not None
+HAS_WIN32 = _WIN32_CLIENT is not None
 
 
 class AsyncOPCDA(BaseAsyncPLC):
@@ -22,10 +24,76 @@ class AsyncOPCDA(BaseAsyncPLC):
         super().__init__(name, ip, port, tags=tags)
         self.prog_id = prog_id
         self.client = None
+        self._driver = None
         self._io_lock = asyncio.Lock()
         self._subscription_task = None
         self._change_callback = None
         self._last_values = {}
+
+    async def _invalidate_connection(self):
+        self.connected = False
+        self._driver = None
+        self._last_values = {}
+
+        if self.client is None:
+            return
+
+        loop = asyncio.get_running_loop()
+        try:
+            if hasattr(self.client, "close") and callable(self.client.close):
+                await loop.run_in_executor(None, self.client.close)
+        except Exception:
+            pass
+        finally:
+            self.client = None
+
+    def _extract_openopc_value(self, result):
+        if result is None:
+            return None
+
+        # OpenOPC often returns tuples like: (tag, value, quality, timestamp)
+        if isinstance(result, tuple):
+            if len(result) >= 2 and isinstance(result[0], str):
+                return result[1]
+            if len(result) > 0:
+                return result[0]
+            return None
+
+        if isinstance(result, list):
+            if not result:
+                return None
+
+            first = result[0]
+            if isinstance(first, tuple) and len(result) == 1:
+                return self._extract_openopc_value(first)
+
+            return first
+
+        return result
+
+    async def _read_single(self, address):
+        loop = asyncio.get_running_loop()
+
+        if self._driver == "openopc":
+            raw = await loop.run_in_executor(None, lambda: self.client.read(address))
+            return self._extract_openopc_value(raw)
+
+        read_fn = getattr(self.client, "Read", None)
+        if not callable(read_fn):
+            raise Exception("win32com client has no Read method")
+        return await loop.run_in_executor(None, lambda: read_fn(address))
+
+    async def _write_single(self, address, value):
+        loop = asyncio.get_running_loop()
+
+        if self._driver == "openopc":
+            await loop.run_in_executor(None, lambda: self.client.write((address, value)))
+            return
+
+        write_fn = getattr(self.client, "Write", None)
+        if not callable(write_fn):
+            raise Exception("win32com client has no Write method")
+        await loop.run_in_executor(None, lambda: write_fn(address, value))
 
     def _normalize_read_result(self, data):
         if data is None:
@@ -89,24 +157,30 @@ class AsyncOPCDA(BaseAsyncPLC):
     async def connect(self):
         try:
             loop = asyncio.get_running_loop()
+
+            if self.client is not None:
+                await self._invalidate_connection()
+
             if HAS_OPENOPC:
-                # OpenOPC.client() is blocking; run in executor
-                self.client = await loop.run_in_executor(None, OpenOPC.client)
-                print(self.client.servers())
+                self.client = await loop.run_in_executor(None, _OPENOPC.client)
                 if not self.prog_id:
                     logger.error(f"{self.name} OPC DA prog_id not provided (OpenOPC)")
                     self.connected = False
                     return
                 await loop.run_in_executor(None, lambda: self.client.connect(self.prog_id))
+                self._driver = "openopc"
 
             elif HAS_WIN32:
                 if not self.prog_id:
                     logger.error(f"{self.name} OPC DA prog_id required for win32com")
                     self.connected = False
                     return
+
                 def _connect_win():
-                    return win32.Dispatch(self.prog_id)
+                    return _WIN32_CLIENT.Dispatch(self.prog_id)
+
                 self.client = await loop.run_in_executor(None, _connect_win)
+                self._driver = "win32"
 
             else:
                 logger.error(f"{self.name} No OpenOPC or pywin32 available for OPC DA")
@@ -119,84 +193,71 @@ class AsyncOPCDA(BaseAsyncPLC):
 
         except Exception as e:
             logger.error(f"{self.name} OPC DA connect error: {e}")
-            self.connected = False
+            await self._invalidate_connection()
             self.retry_count += 1
             await backoff_retry(self.retry_count)
 
     async def read(self):
         async with self._io_lock:
-            if not self.connected:
+            if not self.connected or self.client is None:
                 await self.connect()
-                if not self.connected:
+                if not self.connected or self.client is None:
                     return None
 
-            loop = asyncio.get_running_loop()
             try:
                 if isinstance(self.tags, (list, tuple)):
                     values = {}
                     for tag in self.tags:
-                        if HAS_OPENOPC:
-                            res = await loop.run_in_executor(None, lambda t=tag: self.client.read(t))
-                            values[tag] = res[0] if isinstance(res, (list, tuple)) and len(res) > 0 else res
-                        else:
-                            val = await loop.run_in_executor(None, lambda t=tag: getattr(self.client, 'Read', lambda x: None)(t))
-                            values[tag] = val
+                        values[tag] = await self._read_single(tag)
                     return values
 
                 tag = self.tags
-                if HAS_OPENOPC:
-                    res = await loop.run_in_executor(None, lambda: self.client.read(tag))
-                    return res[0] if isinstance(res, (list, tuple)) and len(res) > 0 else res
-                return await loop.run_in_executor(None, lambda: getattr(self.client, 'Read', lambda x: None)(tag))
+                if tag is None:
+                    return None
+                return await self._read_single(tag)
 
             except Exception as e:
                 logger.error(f"{self.name} OPC DA read error: {e}")
-                self.connected = False
+                await self._invalidate_connection()
                 self.retry_count += 1
                 await backoff_retry(self.retry_count)
                 return None
 
     async def read_tag(self, address):
         async with self._io_lock:
-            if not self.connected:
+            if not self.connected or self.client is None:
                 await self.connect()
-                if not self.connected:
+                if not self.connected or self.client is None:
                     return None
 
-            loop = asyncio.get_running_loop()
             try:
-                if HAS_OPENOPC:
-                    res = await loop.run_in_executor(None, lambda: self.client.read(address))
-                    return res[0] if isinstance(res, (list, tuple)) and len(res) > 0 else res
-                return await loop.run_in_executor(None, lambda: getattr(self.client, 'Read', lambda x: None)(address))
+                return await self._read_single(address)
             except Exception as e:
                 logger.error(f"{self.name} OPC DA read_tag error: {e}")
-                self.connected = False
+                await self._invalidate_connection()
                 self.retry_count += 1
                 await backoff_retry(self.retry_count)
                 return None
 
     async def write(self, address, value):
         async with self._io_lock:
-            loop = asyncio.get_running_loop()
+            if not self.connected or self.client is None:
+                await self.connect()
+                if not self.connected or self.client is None:
+                    raise Exception(f"{self.name} OPC DA not connected")
+
             try:
-                if HAS_OPENOPC:
-                    await loop.run_in_executor(None, lambda: self.client.write((address, value)))
-                else:
-                    await loop.run_in_executor(None, lambda: getattr(self.client, 'Write', lambda a, v: None)(address, value))
+                await self._write_single(address, value)
             except Exception as e:
                 logger.error(f"{self.name} OPC DA write error: {e}")
+                await self._invalidate_connection()
+                self.retry_count += 1
+                await backoff_retry(self.retry_count)
+                raise
 
     async def close(self):
         try:
             await self.unsubscribe_datachange()
-            if not self.client:
-                return
-            loop = asyncio.get_running_loop()
-            if HAS_OPENOPC:
-                await loop.run_in_executor(None, self.client.close)
-            else:
-                # win32com Dispatch objects do not need explicit close in many cases
-                await loop.run_in_executor(None, lambda: None)
+            await self._invalidate_connection()
         except Exception:
             pass
