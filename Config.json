@@ -1,11 +1,31 @@
 {
-  "WAS_IP": "192.168.2.21",
-  "WAS_PORT": 15113,
-  "PLC_TAGS": [
-    "ns=2;s=Channel2.Device2.D1001",
-    "ns=2;s=Channel2.Device2.D1002",
-    "ns=2;s=Channel2.Device2.D1003",
-    "ns=2;s=Channel2.Device2.D1004",
-    "ns=2;s=Channel2.Device2.D1005"
-  ]
+
+  "PLC_INFO": {
+    "OPCUA":{
+      "USEYN": "Y",
+      "NAME": "OPCUA_PLC_1",
+      "IP": "127.0.0.1",
+      "PORT": 49320,
+      "TAGS": [
+        "ns=2;s=Channel2.Device2.D1001",
+        "ns=2;s=Channel2.Device2.D1002",
+        "ns=2;s=Channel2.Device2.D1003",
+        "ns=2;s=Channel2.Device2.D1004",
+        "ns=2;s=Channel2.Device2.D1005"
+      ]
+    },
+    "MITSUBISHI":{
+      "USEYN": "Y",
+      "NAME": "MITSU_PLC_1",
+      "IP": "192.168.2.210",
+      "PORT": 3000,
+      "TAGS": [
+        "D1001",
+        "D1002",
+        "D1003"
+      ]
+    }
+  }
+
+
 }

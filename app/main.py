@@ -10,6 +10,7 @@ import app.jobs.plcjob as __JOB_PLC
 import app.routes.index as __ROUTE_INDEX
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
   # START()를 background task로 실행하여 서버 시작 시 블로킹을 방지
