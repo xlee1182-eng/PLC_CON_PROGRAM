@@ -6,10 +6,51 @@ class AsyncPLCManager:
 
     def __init__(self, plc_list):
         self.plc_list = plc_list
+        self._plc_map = {}
         self.running = True
         self._tasks = []
         self._change_queue = asyncio.Queue()
         self._change_handlers = []
+        self._register_plcs(plc_list)
+
+    def _register_plcs(self, plc_list):
+        self._plc_map = {}
+        for plc in plc_list:
+            if getattr(plc, "name", None) is None:
+                raise ValueError("PLC name is required")
+            if plc.name in self._plc_map:
+                raise ValueError(f"Duplicate PLC name: {plc.name}")
+            self._plc_map[plc.name] = plc
+
+    def get_plc(self, plc_name: str):
+        plc = self._plc_map.get(plc_name)
+        if plc is None:
+            raise Exception(f"PLC '{plc_name}' not found")
+        return plc
+
+    def list_plcs(self):
+        return [
+            {
+                "name": plc.name,
+                "driver_type": getattr(plc, "driver_type", plc.__class__.__name__),
+                "ip": plc.ip,
+                "port": plc.port,
+                "connected": plc.connected,
+                "tags": plc.tags,
+                "supports_subscription": hasattr(plc, "subscribe_datachange"),
+                "supports_read_tag": hasattr(plc, "read_tag"),
+            }
+            for plc in self.plc_list
+        ]
+
+    def get_manager_status(self):
+        running_tasks = sum(1 for t in self._tasks if not t.done())
+        return {
+            "running": self.running,
+            "plc_count": len(self.plc_list),
+            "active_poll_tasks": running_tasks,
+            "plcs": self.list_plcs(),
+        }
 
     def add_change_handler(self, handler):
         if handler not in self._change_handlers:
@@ -94,6 +135,9 @@ class AsyncPLCManager:
             await asyncio.sleep(0.1)   # polling interval
 
     async def start(self):
+        if self._tasks:
+            return
+
         # create background tasks for each PLC poll loop and keep references
         loop = asyncio.get_running_loop()
         # register signal handlers to trigger graceful shutdown
@@ -162,23 +206,82 @@ class AsyncPLCManager:
         """
         PLC 이름으로 쓰기
         """
-        plc = next((p for p in self.plc_list if p.name == plc_name), None)
-
-        if plc is None:
-            raise Exception(f"PLC '{plc_name}' not found")
-
+        plc = self.get_plc(plc_name)
         return await self.write_once(plc, data)      
 
     async def read_by_name(self, plc_name: str, tag: str):
         """
         PLC 이름과 태그로 1회 읽기
         """
-        plc = next((p for p in self.plc_list if p.name == plc_name), None)
-
-        if plc is None:
-            raise Exception(f"PLC '{plc_name}' not found")
-
+        plc = self.get_plc(plc_name)
         return await self.read_once(plc, tag)
+
+    async def read_plc_tags(self, plc_name: str, tags=None):
+        plc = self.get_plc(plc_name)
+
+        if tags is None:
+            data = await plc.read()
+            if isinstance(data, dict):
+                return data
+            return {"value": data}
+
+        if isinstance(tags, str):
+            tags = [tags]
+
+        result = {}
+        for tag in tags:
+            result[tag] = await self.read_once(plc, tag)
+        return result
+
+    async def read_all_plcs(self, tags_by_plc=None):
+        if tags_by_plc is None:
+            tags_by_plc = {}
+
+        results = {}
+        for plc in self.plc_list:
+            try:
+                request_tags = tags_by_plc.get(plc.name)
+                results[plc.name] = {
+                    "ok": True,
+                    "data": await self.read_plc_tags(plc.name, request_tags),
+                }
+            except Exception as e:
+                results[plc.name] = {
+                    "ok": False,
+                    "error": str(e),
+                }
+        return results
+
+    async def write_batch(self, commands):
+        """
+        commands example:
+        [
+            {"plc_name": "OPCUA_PLC_1", "data": {"ns=2;s=...": 1}},
+            {"plc_name": "MITSU_PLC_1", "data": {"D100": 100}},
+        ]
+        """
+        if not isinstance(commands, list):
+            raise ValueError("commands must be a list")
+
+        results = []
+        for command in commands:
+            plc_name = command.get("plc_name")
+            data = command.get("data") or {}
+
+            try:
+                await self.write_by_name(plc_name, data)
+                results.append({
+                    "plc_name": plc_name,
+                    "ok": True,
+                })
+            except Exception as e:
+                results.append({
+                    "plc_name": plc_name,
+                    "ok": False,
+                    "error": str(e),
+                })
+
+        return results
 
     async def read_once(self, plc, tag: str):
         """

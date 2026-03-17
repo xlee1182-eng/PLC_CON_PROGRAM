@@ -34,3 +34,18 @@ python main.py
 
 ## 👤 Author
 LI XIONG
+
+## PLC Driver Integration
+
+The project now uses a unified driver factory.
+
+- Driver factory file: app/plc_drivers/driver_factory.py
+- PLC runtime build point: app/jobs/plcjob.py
+
+When adding a new PLC protocol:
+
+1. Implement a new async driver class based on BaseAsyncPLC.
+2. Add a builder function in app/plc_drivers/driver_factory.py.
+3. Register the type in DRIVER_BUILDERS.
+
+No additional type-branching changes are required in plcjob.

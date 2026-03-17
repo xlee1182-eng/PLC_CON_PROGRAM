@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from loguru import logger
 ## functions
 import app.functions.CommonFunction as __FUNCTION_COMMON
@@ -57,6 +57,111 @@ async def plc_read(plc_name: str, tag: str):
       'tag': tag,
       'value': value
     })
+  except HTTPException:
+    raise
+  except Exception as e:
+    logger.error(f"API route fatal error: {e}")
+    raise HTTPException(status_code = 500, detail = str(e))
+
+
+@router.get('/plc_list')
+async def plc_list():
+
+  try:
+    plc_manager = __JOB_PLC.GET_PLC_MANAGER()
+
+    if plc_manager is None:
+      raise HTTPException(status_code = 503, detail = 'PLC manager is not ready')
+
+    data = plc_manager.list_plcs()
+    return __FUNCTION_COMMON.RESPONSEFORMAT('OK', 'PLC list success', data)
+  except HTTPException:
+    raise
+  except Exception as e:
+    logger.error(f"API route fatal error: {e}")
+    raise HTTPException(status_code = 500, detail = str(e))
+
+
+@router.get('/plc_status')
+async def plc_status():
+
+  try:
+    plc_manager = __JOB_PLC.GET_PLC_MANAGER()
+
+    if plc_manager is None:
+      raise HTTPException(status_code = 503, detail = 'PLC manager is not ready')
+
+    data = plc_manager.get_manager_status()
+    return __FUNCTION_COMMON.RESPONSEFORMAT('OK', 'PLC manager status', data)
+  except HTTPException:
+    raise
+  except Exception as e:
+    logger.error(f"API route fatal error: {e}")
+    raise HTTPException(status_code = 500, detail = str(e))
+
+
+@router.post('/plc_read_all')
+async def plc_read_all(payload: dict = Body(default = None)):
+  """
+  payload example
+  {
+    "tags_by_plc": {
+      "OPCUA_PLC_1": ["ns=2;s=Channel2.Device2.D1001"],
+      "MITSU_PLC_1": ["D1001", "D1002"]
+    }
+  }
+  """
+
+  try:
+    plc_manager = __JOB_PLC.GET_PLC_MANAGER()
+
+    if plc_manager is None:
+      raise HTTPException(status_code = 503, detail = 'PLC manager is not ready')
+
+    request_data = payload or {}
+    tags_by_plc = request_data.get('tags_by_plc') or {}
+    data = await plc_manager.read_all_plcs(tags_by_plc)
+
+    return __FUNCTION_COMMON.RESPONSEFORMAT('OK', 'PLC read all success', data)
+  except HTTPException:
+    raise
+  except Exception as e:
+    logger.error(f"API route fatal error: {e}")
+    raise HTTPException(status_code = 500, detail = str(e))
+
+
+@router.post('/plc_write_batch')
+async def plc_write_batch(payload: dict = Body(...)):
+  """
+  payload example
+  {
+    "commands": [
+      {
+        "plc_name": "OPCUA_PLC_1",
+        "data": {
+          "ns=2;s=Channel2.Device2.D1001": 1
+        }
+      },
+      {
+        "plc_name": "MITSU_PLC_1",
+        "data": {
+          "D1001": 100
+        }
+      }
+    ]
+  }
+  """
+
+  try:
+    plc_manager = __JOB_PLC.GET_PLC_MANAGER()
+
+    if plc_manager is None:
+      raise HTTPException(status_code = 503, detail = 'PLC manager is not ready')
+
+    commands = payload.get('commands') if isinstance(payload, dict) else None
+    data = await plc_manager.write_batch(commands)
+
+    return __FUNCTION_COMMON.RESPONSEFORMAT('OK', 'PLC write batch success', data)
   except HTTPException:
     raise
   except Exception as e:

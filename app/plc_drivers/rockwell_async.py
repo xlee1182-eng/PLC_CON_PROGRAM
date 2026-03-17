@@ -1,30 +1,35 @@
 import asyncio
+
 from loguru import logger
 
 from app.plc_drivers.base_plc import BaseAsyncPLC
 from app.plc_drivers.reconnect import backoff_retry
 
 
-class AsyncMitsubishiPLC(BaseAsyncPLC):
-    """Asynchronous wrapper around a Mitsubishi MC protocol client.
+def _optional_import(module_name):
+    try:
+        return __import__(module_name, fromlist=["*"])
+    except Exception:
+        return None
 
-    Uses :class:`pymcprotocol.type3e.Type3E` internally.  Since the
-    underlying library is strictly synchronous we delegate all I/O
-    operations to ``asyncio.to_thread`` which keeps the public API
-    non‑blocking.
 
-    ``tags`` are expected to be a string (single device) or an iterable
-    of device addresses (e.g. ``"D100"``, ``"C0"``).  Only word reads
-    are implemented for simplicity; bit devices could be added later by
-    calling ``batchread_bitunits`` when the tag starts with ``X``/``Y``.
+_PYCOMM3 = _optional_import("pycomm3")
+HAS_PYCOMM3 = _PYCOMM3 is not None
+
+
+class AsyncRockwellPLC(BaseAsyncPLC):
+    """Asynchronous Rockwell/Allen-Bradley driver using pycomm3 LogixDriver.
+
+    Tags are Logix symbolic tag names (e.g. "Program:Main.TagA", "TagB[0]").
     """
 
     def __init__(
         self,
         name,
         ip,
-        port=5006,
-        plctype="Q",
+        port=44818,
+        slot=0,
+        path=None,
         tags=None,
         subscription_mode="auto",
         active_poll_ms=100,
@@ -32,7 +37,8 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
         burst_cycles=10,
     ):
         super().__init__(name, ip, port, tags=tags)
-        self.plctype = plctype
+        self.slot = slot
+        self.path = path
         self.client = None
         self._io_lock = asyncio.Lock()
         self._subscription_task = None
@@ -47,6 +53,11 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
     def _is_adaptive_mode(self):
         return self.subscription_mode in ("auto", "adaptive", "semi-push")
 
+    def _build_connection_path(self):
+        if self.path:
+            return self.path
+        return f"{self.ip}:{self.port}/{self.slot}"
+
     def _normalize_read_result(self, data):
         if data is None:
             return {}
@@ -55,61 +66,30 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
         tag = self.tags if not isinstance(self.tags, (list, tuple)) else "__value__"
         return {tag: data}
 
-    def _is_bit_device(self, address):
-        if not isinstance(address, str) or not address:
-            return False
-        return address[0].upper() in ("X", "Y", "M", "L", "F", "B")
+    def _extract_tag_result(self, result):
+        if result is None:
+            return None
 
-    def _coerce_scalar_for_write(self, value, is_bit):
-        if is_bit:
-            if isinstance(value, bool):
-                return 1 if value else 0
-            if isinstance(value, (int, float)):
-                iv = int(value)
-                if iv not in (0, 1):
-                    raise ValueError(f"bit device value must be 0 or 1, got {value}")
-                return iv
-            if isinstance(value, str):
-                s = value.strip().lower()
-                if s in ("1", "true", "t", "y", "yes", "on"):
-                    return 1
-                if s in ("0", "false", "f", "n", "no", "off"):
-                    return 0
-            raise ValueError(f"unsupported bit device value: {value}")
+        # pycomm3 Tag object typically has these attributes.
+        tag_name = getattr(result, "tag", None)
+        error = getattr(result, "error", None)
+        value = getattr(result, "value", None)
 
-        # word device
-        if isinstance(value, bool):
-            iv = 1 if value else 0
-        elif isinstance(value, int):
-            iv = value
-        elif isinstance(value, float):
-            if not value.is_integer():
-                raise ValueError(f"word device value must be integer-like, got {value}")
-            iv = int(value)
-        elif isinstance(value, str):
-            s = value.strip()
-            if s == "":
-                raise ValueError("word device value cannot be empty string")
-            iv = int(float(s)) if "." in s else int(s)
-        else:
-            raise ValueError(f"unsupported word device value type: {type(value)}")
+        if error:
+            raise RuntimeError(f"read error ({tag_name}): {error}")
 
-        # Convert signed 16-bit range to unsigned representation used by word writes.
-        if -32768 <= iv < 0:
-            iv = 65536 + iv
+        if tag_name is not None:
+            return tag_name, value
 
-        if not (0 <= iv <= 65535):
-            raise ValueError(f"word device value out of range (0..65535 or -32768..32767), got {value}")
+        return None, result
 
-        return iv
+    def _read_sync(self, tags):
+        if isinstance(tags, (list, tuple)):
+            return self.client.read(*tags)
+        return self.client.read(tags)
 
-    def _prepare_write_values(self, address, value):
-        is_bit = self._is_bit_device(address)
-        if isinstance(value, (list, tuple)):
-            values = [self._coerce_scalar_for_write(v, is_bit) for v in value]
-        else:
-            values = [self._coerce_scalar_for_write(value, is_bit)]
-        return is_bit, values
+    def _write_sync(self, address, value):
+        return self.client.write((address, value))
 
     async def _monitor_changes(self, interval):
         adaptive = self._is_adaptive_mode()
@@ -128,7 +108,6 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
                 values = self._normalize_read_result(data)
                 has_change = False
 
-                # First successful snapshot is baseline only (no event emit).
                 if not self._baseline_initialized:
                     self._last_values.update(values)
                     self._baseline_initialized = True
@@ -152,7 +131,7 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.error(f"{self.name} Mitsubishi subscription monitor error: {e}")
+                logger.error(f"{self.name} Rockwell subscription monitor error: {e}")
 
             if adaptive:
                 if has_change:
@@ -171,7 +150,7 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
         interval = max(publishing_interval / 1000, 0.1)
 
         if self.subscription_mode == "push":
-            logger.warning(f"{self.name} Mitsubishi native push is unavailable, fallback to adaptive polling")
+            logger.warning(f"{self.name} Rockwell native push is unavailable, fallback to adaptive polling")
             self.subscription_mode = "auto"
 
         self._baseline_initialized = False
@@ -180,7 +159,7 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
         if self._subscription_task is None or self._subscription_task.done():
             self._subscription_task = asyncio.create_task(self._monitor_changes(interval))
 
-        logger.info(f"{self.name} Mitsubishi subscription monitor started ({interval}s)")
+        logger.info(f"{self.name} Rockwell subscription monitor started ({interval}s)")
         return True
 
     async def unsubscribe_datachange(self):
@@ -195,52 +174,27 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
         self._last_values = {}
         self._baseline_initialized = False
 
+    def _create_client(self):
+        if not HAS_PYCOMM3:
+            raise RuntimeError("pycomm3 is not installed")
+
+        driver = _PYCOMM3.LogixDriver(self._build_connection_path())
+        driver.open()
+        return driver
+
     async def connect(self):
         try:
+            if self.client is not None:
+                await asyncio.to_thread(self.client.close)
             self.client = await asyncio.to_thread(self._create_client)
             self.connected = True
             self.retry_count = 0
-            logger.info(f"{self.name} connected (Mitsubishi MC protocol)")
+            logger.info(f"{self.name} connected (Rockwell Logix)")
         except Exception as e:
-            logger.error(f"{self.name} Mitsubishi connect error: {e}")
+            logger.error(f"{self.name} Rockwell connect error: {e}")
             self.connected = False
             self.retry_count += 1
             await backoff_retry(self.retry_count)
-
-    def _create_client(self):
-        # this runs in a thread pool
-        from pymcprotocol import Type3E
-
-        client = Type3E(self.plctype)
-        client.connect(self.ip, self.port)
-        return client
-
-    async def read(self):
-        async with self._io_lock:
-            if not self.connected:
-                await self.connect()
-                return None
-
-            try:
-                if isinstance(self.tags, (list, tuple)):
-                    values = {}
-                    for tag in self.tags:
-                        res = await asyncio.to_thread(
-                            self.client.batchread_wordunits, tag, 1
-                        )
-                        values[tag] = res[0] if res else None
-                    return values
-
-                res = await asyncio.to_thread(
-                    self.client.batchread_wordunits, self.tags, 1
-                )
-                return res[0] if res else None
-            except Exception as e:
-                logger.error(f"{self.name} Mitsubishi read error: {e}")
-                self.connected = False
-                self.retry_count += 1
-                await backoff_retry(self.retry_count)
-                return None
 
     async def read_tag(self, address):
         async with self._io_lock:
@@ -250,12 +204,41 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
                     return None
 
             try:
-                res = await asyncio.to_thread(
-                    self.client.batchread_wordunits, address, 1
-                )
-                return res[0] if res else None
+                raw = await asyncio.to_thread(self._read_sync, address)
+                _, value = self._extract_tag_result(raw)
+                return value
             except Exception as e:
-                logger.error(f"{self.name} Mitsubishi read_tag error: {e}")
+                logger.error(f"{self.name} Rockwell read_tag error: {e}")
+                self.connected = False
+                self.retry_count += 1
+                await backoff_retry(self.retry_count)
+                return None
+
+    async def read(self):
+        async with self._io_lock:
+            if not self.connected:
+                await self.connect()
+                if not self.connected:
+                    return None
+
+            try:
+                if isinstance(self.tags, (list, tuple)):
+                    raw_results = await asyncio.to_thread(self._read_sync, self.tags)
+                    values = {}
+                    for item in raw_results:
+                        tag_name, value = self._extract_tag_result(item)
+                        if tag_name is not None:
+                            values[tag_name] = value
+                    return values
+
+                if self.tags is None:
+                    return None
+
+                raw = await asyncio.to_thread(self._read_sync, self.tags)
+                _, value = self._extract_tag_result(raw)
+                return value
+            except Exception as e:
+                logger.error(f"{self.name} Rockwell read error: {e}")
                 self.connected = False
                 self.retry_count += 1
                 await backoff_retry(self.retry_count)
@@ -263,22 +246,30 @@ class AsyncMitsubishiPLC(BaseAsyncPLC):
 
     async def write(self, address, value):
         async with self._io_lock:
+            if not self.connected:
+                await self.connect()
+                if not self.connected:
+                    raise Exception(f"{self.name} Rockwell not connected")
+
             try:
-                is_bit, values = self._prepare_write_values(address, value)
-                if is_bit:
-                    await asyncio.to_thread(
-                        self.client.batchwrite_bitunits, address, values
-                    )
-                else:
-                    await asyncio.to_thread(
-                        self.client.batchwrite_wordunits, address, values
-                    )
+                result = await asyncio.to_thread(self._write_sync, address, value)
+                error = getattr(result, "error", None)
+                if error:
+                    raise RuntimeError(f"write error ({address}): {error}")
             except Exception as e:
-                logger.error(f"{self.name} Mitsubishi write error: {e}")
+                logger.error(f"{self.name} Rockwell write error: {e}")
+                self.connected = False
+                self.retry_count += 1
+                await backoff_retry(self.retry_count)
+                raise
 
     async def close(self):
         try:
             await self.unsubscribe_datachange()
-            await asyncio.to_thread(self.client.close)
+            if self.client is not None:
+                await asyncio.to_thread(self.client.close)
         except Exception:
             pass
+        finally:
+            self.connected = False
+            self.client = None

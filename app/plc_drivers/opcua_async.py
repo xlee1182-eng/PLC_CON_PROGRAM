@@ -1,7 +1,7 @@
 import asyncio
 from asyncua import Client, ua
-from app.plc_ctl.base_plc import BaseAsyncPLC
-from app.plc_ctl.reconnect import backoff_retry
+from app.plc_drivers.base_plc import BaseAsyncPLC
+from app.plc_drivers.reconnect import backoff_retry
 from loguru import logger
 
 

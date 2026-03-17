@@ -1,7 +1,7 @@
 import asyncio
 from importlib import import_module
-from app.plc_ctl.base_plc import BaseAsyncPLC
-from app.plc_ctl.reconnect import backoff_retry
+from app.plc_drivers.base_plc import BaseAsyncPLC
+from app.plc_drivers.reconnect import backoff_retry
 from loguru import logger
 
 
@@ -185,7 +185,11 @@ class AsyncOPCDA(BaseAsyncPLC):
             else:
                 logger.error(f"{self.name} No OpenOPC or pywin32 available for OPC DA")
                 self.connected = False
-                return
+                raise Exception("No OPC DA client library available")
+                # await self._invalidate_connection()
+                # self.retry_count += 1
+                # await backoff_retry(self.retry_count)
+                # return
 
             self.connected = True
             self.retry_count = 0

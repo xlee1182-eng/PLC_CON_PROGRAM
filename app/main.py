@@ -17,7 +17,8 @@ async def lifespan(app: FastAPI):
   task = asyncio.create_task(__JOB_PLC.START())
   app.state.plc_task = task
   yield
-  # 서버 종료 시 백그라운드 task 취소
+  # 서버 종료 시 매니저 정리 후 백그라운드 task 취소
+  await __JOB_PLC.STOP()
   task.cancel()
   try:
     await task

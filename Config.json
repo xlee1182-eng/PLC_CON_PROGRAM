@@ -2,7 +2,7 @@
 
   "PLC_INFO": {
     "OPCUA":{
-      "USEYN": "Y",
+      "USEYN": "N",
       "NAME": "OPCUA_PLC_1",
       "IP": "127.0.0.1",
       "PORT": 49320,
@@ -37,6 +37,30 @@
         "Channel1.Device1.D1002",
         "Channel1.Device1.D1003"
       ]
+    },
+    "SIEMENS": {
+      "USEYN": "Y",
+      "NAME": "S7_PLC_1",
+      "IP": "192.168.0.10",
+      "PORT": 102,
+      "RACK": 0,
+      "SLOT": 1,
+      "TAGS": ["DB1.DBW0", "DB1.DBX2.0", "MW20", "Q0.0"]
+    },
+    "ROCKWELL": {
+      "USEYN": "N",
+      "NAME": "AB_PLC_1",
+      "IP": "192.168.0.20",
+      "PORT": 44818,
+      "SLOT": 0,
+      "PATH": "192.168.0.20:44818/0",
+      "SUBSCRIPTION": {
+        "MODE": "auto",
+        "ACTIVE_POLL_MS": 100,
+        "IDLE_POLL_MS": 1000,
+        "BURST_CYCLES": 10
+      },
+      "TAGS": ["Tag_A", "Program:MainProgram.Tag_B"]
     }
   }
 
