@@ -145,6 +145,23 @@
       word-break: break-all;
     }
 
+    .plc-icon {
+      width: 56px;
+      height: 32px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      background: #fff;
+    }
+
+    .plc-icon-cell {
+      width: 70px;
+      text-align: center;
+    }
+
     .form-grid {
       display: grid;
       gap: 8px;
@@ -235,6 +252,7 @@
             <thead>
               <tr>
                 <th>PLC</th>
+                <th>이미지</th>
                 <th>타입</th>
                 <th>IP</th>
                 <th>PORT</th>
@@ -349,6 +367,43 @@
       }
     }
 
+    function getPlcFallbackImage(driverType) {
+      const type = String(driverType || '').toUpperCase();
+      const imageMap = {
+        OPCUA: { label: 'UA', bg: '#0f766e' },
+        OPCDA: { label: 'DA', bg: '#2563eb' },
+        MITSUBISHI: { label: 'M', bg: '#15803d' },
+        SIEMENS: { label: 'S7', bg: '#0ea5e9' },
+        ROCKWELL: { label: 'AB', bg: '#ea580c' }
+      };
+
+      const cfg = imageMap[type] || { label: 'PLC', bg: '#334155' };
+
+      const svg = `
+        <svg xmlns='http://www.w3.org/2000/svg' width='96' height='54' viewBox='0 0 96 54'>
+          <rect x='1' y='1' width='94' height='52' rx='10' fill='${cfg.bg}' stroke='rgba(255,255,255,0.35)' />
+          <rect x='8' y='8' width='80' height='38' rx='6' fill='rgba(255,255,255,0.12)' />
+          <circle cx='80' cy='18' r='4' fill='#22c55e' />
+          <text x='48' y='34' text-anchor='middle' fill='#ffffff' font-size='18' font-weight='700' font-family='Segoe UI, Arial, sans-serif'>${cfg.label}</text>
+        </svg>
+      `;
+
+      return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    }
+
+    function getPlcLogoPath(driverType) {
+      const type = String(driverType || '').toUpperCase();
+      const logoMap = {
+        OPCUA: '/static/assets/plc_logos/opcua.jpg',
+        OPCDA: '/static/assets/plc_logos/opcda.jpg',
+        MITSUBISHI: '/static/assets/plc_logos/mitsubishi.png',
+        SIEMENS: '/static/assets/plc_logos/siemens.png',
+        ROCKWELL: '/static/assets/plc_logos/rockwell.png'
+      };
+
+      return logoMap[type] || '/static/assets/plc_logos/default.jpg';
+    }
+
     async function loadPlcInfo() {
       const res = await fetch('/plc_list');
       const data = await res.json();
@@ -360,15 +415,30 @@
 
       for (const plc of plcListCache) {
         const tr = document.createElement('tr');
+        const logoPath = getPlcLogoPath(plc.driver_type);
+        const fallbackImage = getPlcFallbackImage(plc.driver_type);
         tr.dataset.plcName = plc.name || '';
         tr.innerHTML = `
           <td>${plc.name || ''}</td>
+          <td class="plc-icon-cell"><img class="plc-icon" src="${logoPath}" data-fallback="${fallbackImage}" alt="${plc.driver_type || 'PLC'}" /></td>
           <td>${plc.driver_type || ''}</td>
           <td>${plc.ip || ''}</td>
           <td>${plc.port ?? ''}</td>
           <td class="${plc.connected ? 'ok' : 'bad'}">${plc.connected ? 'Connected' : 'Disconnected'}</td>
           <td>${Array.isArray(plc.tags) ? plc.tags.length : 0}</td>
         `;
+
+        const logoImg = tr.querySelector('img.plc-icon');
+        if (logoImg) {
+          logoImg.addEventListener('error', () => {
+            const fallback = logoImg.dataset.fallback;
+
+            if (fallback && logoImg.src !== fallback) {
+              logoImg.src = fallback;
+            }
+          });
+        }
+
         plcTableBody.appendChild(tr);
 
         const option = document.createElement('option');
@@ -467,7 +537,7 @@
         for (const newPlc of list) {
           const row = plcTableBody.querySelector(`tr[data-plc-name="${newPlc.name}"]`);
           if (!row) continue;
-          const statusCell = row.cells[4];
+          const statusCell = row.cells[5];
           if (statusCell) {
             statusCell.className = newPlc.connected ? 'ok' : 'bad';
             statusCell.textContent = newPlc.connected ? 'Connected' : 'Disconnected';

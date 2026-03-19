@@ -16,8 +16,8 @@
 
 권장 명령 (Windows)
 - 폴더형(onedir)
-pyinstaller -D server.py -y --clean --hidden-import=app.main --add-data "app/web/dashboard.html;app/web"
+pyinstaller -D server.py -y --clean --hidden-import=app.main --add-data "app/web;app/web"
 
 - 단일파일(onefile)
-pyinstaller -F server.py -y --clean --hidden-import=app.main --add-data "app/web/dashboard.html;app/web"
+pyinstaller -F server.py -y --clean --hidden-import=app.main --add-data "app/web;app/web"
 

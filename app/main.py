@@ -1,5 +1,8 @@
+from pathlib import Path
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import asyncio
 
@@ -27,6 +30,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+def _resolve_web_root() -> Path:
+  if getattr(sys, 'frozen', False):
+    meipass = getattr(sys, '_MEIPASS', None)
+    if meipass:
+      return Path(meipass) / 'app' / 'web'
+  return Path(__file__).resolve().parent / 'web'
+
+
+WEB_ROOT = _resolve_web_root()
+if WEB_ROOT.exists():
+  app.mount('/static', StaticFiles(directory=str(WEB_ROOT)), name='web-static')
 
 origins = [ '*' ]
 app.add_middleware(
