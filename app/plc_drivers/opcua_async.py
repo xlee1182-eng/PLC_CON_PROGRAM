@@ -25,6 +25,7 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
         self._subscription = None
         self._subscription_handles = []
         self._change_callback = None
+        self._publishing_interval = 100
 
     async def _invalidate_connection(self):
         self.connected = False
@@ -80,12 +81,55 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
             await self.client.connect()
             self.connected = True
             self.retry_count = 0
+
+            # Re-create datachange subscription automatically after reconnect.
+            if self._change_callback is not None and self._subscription is None:
+                await self._subscribe_datachange_no_lock(
+                    callback=self._change_callback,
+                    publishing_interval=self._publishing_interval,
+                )
+
             logger.info(f"{self.name} connected (OPC UA)")
         except Exception as e:
             logger.error(f"{self.name} OPC UA connect error: {e}")
             await self._invalidate_connection()
             self.retry_count += 1
             await backoff_retry(self.retry_count)
+
+    async def _subscribe_datachange_no_lock(self, callback, publishing_interval=100):
+        self._change_callback = callback
+        self._publishing_interval = publishing_interval
+
+        if not self.connected or self.client is None:
+            return False
+
+        if self._subscription is not None:
+            return True
+
+        try:
+            handler = _OPCUADataChangeHandler(self)
+            self._subscription = await self.client.create_subscription(publishing_interval, handler)
+
+            node_ids = self.tags if isinstance(self.tags, (list, tuple)) else [self.node_id]
+            nodes = [self.client.get_node(nid) for nid in node_ids]
+            handles = await self._subscription.subscribe_data_change(nodes)
+            if isinstance(handles, list):
+                self._subscription_handles = handles
+            else:
+                self._subscription_handles = [handles]
+
+            logger.info(f"{self.name} OPC UA datachange subscribed ({len(nodes)} nodes)")
+            return True
+        except Exception as e:
+            logger.error(f"{self.name} OPC UA subscribe error: {e}")
+            if self._subscription is not None:
+                try:
+                    await self._subscription.delete()
+                except Exception:
+                    pass
+            self._subscription = None
+            self._subscription_handles = []
+            return False
 
     def on_datachange(self, node, value, data):
         if self._change_callback is None:
@@ -114,40 +158,14 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
 
     async def subscribe_datachange(self, callback, publishing_interval=100):
         self._change_callback = callback
+        self._publishing_interval = publishing_interval
 
         async with self._io_lock:
             if not self.connected or self.client is None:
                 await self.connect()
                 if not self.connected or self.client is None:
                     return False
-
-            if self._subscription is not None:
-                return True
-
-            try:
-                handler = _OPCUADataChangeHandler(self)
-                self._subscription = await self.client.create_subscription(publishing_interval, handler)
-
-                node_ids = self.tags if isinstance(self.tags, (list, tuple)) else [self.node_id]
-                nodes = [self.client.get_node(nid) for nid in node_ids]
-                handles = await self._subscription.subscribe_data_change(nodes)
-                if isinstance(handles, list):
-                    self._subscription_handles = handles
-                else:
-                    self._subscription_handles = [handles]
-
-                logger.info(f"{self.name} OPC UA datachange subscribed ({len(nodes)} nodes)")
-                return True
-            except Exception as e:
-                logger.error(f"{self.name} OPC UA subscribe error: {e}")
-                if self._subscription is not None:
-                    try:
-                        await self._subscription.delete()
-                    except Exception:
-                        pass
-                self._subscription = None
-                self._subscription_handles = []
-                return False
+            return await self._subscribe_datachange_no_lock(callback, publishing_interval)
 
     async def unsubscribe_datachange(self):
         async with self._io_lock:
@@ -184,9 +202,9 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
                 return value
             except Exception as e:
                 logger.error(f"{self.name} OPC UA read error: {e}")
-                await self._invalidate_connection()
-                self.retry_count += 1
-                await backoff_retry(self.retry_count)
+                # await self._invalidate_connection()
+                # self.retry_count += 1
+                # await backoff_retry(self.retry_count)
                 return None
 
     async def read_tag(self, address):
@@ -202,9 +220,9 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
                 return await node.read_value()
             except Exception as e:
                 logger.error(f"{self.name} OPC UA read_tag error: {e}")
-                await self._invalidate_connection()
-                self.retry_count += 1
-                await backoff_retry(self.retry_count)
+                # await self._invalidate_connection()
+                # self.retry_count += 1
+                # await backoff_retry(self.retry_count)
                 return None
 
     async def write(self, address, value):
@@ -232,9 +250,9 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
                     await node.write_value(casted_value)
             except Exception as e:
                 logger.error(f"{self.name} OPC UA write error: {e}")
-                await self._invalidate_connection()
-                self.retry_count += 1
-                await backoff_retry(self.retry_count)
+                # await self._invalidate_connection()
+                # self.retry_count += 1
+                # await backoff_retry(self.retry_count)
                 raise
 
     async def close(self):

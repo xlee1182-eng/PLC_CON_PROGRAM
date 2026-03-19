@@ -3,4 +3,5 @@ fastapi==0.135.1
 humps==0.2.2
 loguru==0.7.3
 pymcprotocol==0.3.0
+pywin32==308
 uvicorn==0.42.0

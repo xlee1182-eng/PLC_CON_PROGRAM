@@ -2,16 +2,18 @@
 
   "PLC_INFO": {
     "OPCUA":{
-      "USEYN": "N",
+      "USEYN": "Y",
       "NAME": "OPCUA_PLC_1",
       "IP": "127.0.0.1",
       "PORT": 49320,
       "TAGS": [
+        "ns=2;s=Channel2.Device2.B0",
         "ns=2;s=Channel2.Device2.D1001",
         "ns=2;s=Channel2.Device2.D1002",
         "ns=2;s=Channel2.Device2.D1003",
         "ns=2;s=Channel2.Device2.D1004",
-        "ns=2;s=Channel2.Device2.D1005"
+        "ns=2;s=Channel2.Device2.D1005",
+        "ns=2;s=Channel2.Device2.D1006"
       ]
     },
     "MITSUBISHI":{
@@ -30,8 +32,7 @@
       "NAME": "OPCDA_PLC_1",
       "IP": "localhost",
       "PORT": 0,
-      "PROG_ID_old": "Takebishi.Melsec.1",
-      "PROG_ID": "Kepware.KEPServerEX.V6",
+      "PROG_ID": "Takebishi.Melsec.1",
       "TAGS": [
         "Channel1.Device1.D1001",
         "Channel1.Device1.D1002",
@@ -39,13 +40,13 @@
       ]
     },
     "SIEMENS": {
-      "USEYN": "Y",
+      "USEYN": "N",
       "NAME": "S7_PLC_1",
-      "IP": "192.168.0.10",
+      "IP": "192.168.2.211",
       "PORT": 102,
       "RACK": 0,
       "SLOT": 1,
-      "TAGS": ["DB1.DBW0", "DB1.DBX2.0", "MW20", "Q0.0"]
+      "TAGS": ["DB0.DBX0.0", "DB0.DBX0.1", "DB0.DBX0.2", "DB0.DBX0.3", "DB0.DBX0.4"]
     },
     "ROCKWELL": {
       "USEYN": "N",

@@ -369,9 +369,9 @@ class AsyncSiemensPLC(BaseAsyncPLC):
                 return self._decode_value(spec, raw)
             except Exception as e:
                 logger.error(f"{self.name} Siemens read error: {e}")
-                self.connected = False
-                self.retry_count += 1
-                await backoff_retry(self.retry_count)
+                # self.connected = False
+                # self.retry_count += 1
+                # await backoff_retry(self.retry_count)
                 return None
 
     async def write(self, address, value):
@@ -391,9 +391,9 @@ class AsyncSiemensPLC(BaseAsyncPLC):
                 await asyncio.to_thread(self._write_block, spec, payload)
             except Exception as e:
                 logger.error(f"{self.name} Siemens write error: {e}")
-                self.connected = False
-                self.retry_count += 1
-                await backoff_retry(self.retry_count)
+                # self.connected = False
+                # self.retry_count += 1
+                # await backoff_retry(self.retry_count)
                 raise
 
     async def close(self):
