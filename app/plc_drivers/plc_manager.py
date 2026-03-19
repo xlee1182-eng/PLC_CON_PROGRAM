@@ -1,5 +1,6 @@
 import asyncio
 import signal
+import os
 from loguru import logger
 
 class AsyncPLCManager:
@@ -11,7 +12,24 @@ class AsyncPLCManager:
         self._tasks = []
         self._change_queue = asyncio.Queue()
         self._change_handlers = []
+        raw_timeout = os.getenv("PLC_OPERATION_TIMEOUT_SEC", "3.0")
+        try:
+            parsed_timeout = float(raw_timeout)
+        except (TypeError, ValueError):
+            parsed_timeout = 3.0
+        self._operation_timeout = parsed_timeout if parsed_timeout > 0 else None
         self._register_plcs(plc_list)
+
+    async def _run_with_timeout(self, coro, context: str):
+        if self._operation_timeout is None:
+            return await coro
+
+        try:
+            return await asyncio.wait_for(coro, timeout=self._operation_timeout)
+        except asyncio.TimeoutError as e:
+            raise TimeoutError(
+                f"{context} timeout after {self._operation_timeout:.1f}s"
+            ) from e
 
     def _register_plcs(self, plc_list):
         self._plc_map = {}
@@ -116,6 +134,17 @@ class AsyncPLCManager:
 
         while self.running:
             try:
+                # Startup can begin in polling mode when the first subscribe
+                # attempt fails. Retry subscription and stop polling once it succeeds.
+                if hasattr(plc, "subscribe_datachange"):
+                    try:
+                        subscribed = await plc.subscribe_datachange(self._on_change_event)
+                        if subscribed:
+                            logger.info(f"{plc.name} switched from polling to subscription mode")
+                            return
+                    except Exception as sub_e:
+                        logger.error(f"{plc.name} subscribe retry error: {sub_e}")
+
                 data = await plc.read()
                 if data is not None:
                     # if a PLC returns a mapping we assume it represents
@@ -220,7 +249,7 @@ class AsyncPLCManager:
         plc = self.get_plc(plc_name)
 
         if tags is None:
-            data = await plc.read()
+            data = await self._run_with_timeout(plc.read(), f"{plc.name} read")
             if isinstance(data, dict):
                 return data
             return {"value": data}
@@ -237,20 +266,30 @@ class AsyncPLCManager:
         if tags_by_plc is None:
             tags_by_plc = {}
 
-        results = {}
-        for plc in self.plc_list:
+        # If specific PLC names are requested, only read those PLCs.
+        request_filter = set(tags_by_plc.keys()) if isinstance(tags_by_plc, dict) else set()
+
+        async def _read_single_plc(plc):
             try:
                 request_tags = tags_by_plc.get(plc.name)
-                results[plc.name] = {
+                data = await self.read_plc_tags(plc.name, request_tags)
+                return plc.name, {
                     "ok": True,
-                    "data": await self.read_plc_tags(plc.name, request_tags),
+                    "data": data,
                 }
             except Exception as e:
-                results[plc.name] = {
+                return plc.name, {
                     "ok": False,
                     "error": str(e),
                 }
-        return results
+
+        targets = [
+            plc for plc in self.plc_list
+            if not request_filter or plc.name in request_filter
+        ]
+
+        pairs = await asyncio.gather(*(_read_single_plc(plc) for plc in targets))
+        return {name: payload for name, payload in pairs}
 
     async def write_batch(self, commands):
         """
@@ -289,9 +328,15 @@ class AsyncPLCManager:
         """
         try:
             if hasattr(plc, "read_tag"):
-                value = await plc.read_tag(tag)
+                value = await self._run_with_timeout(
+                    plc.read_tag(tag),
+                    f"{plc.name} read_tag({tag})",
+                )
             else:
-                data = await plc.read()
+                data = await self._run_with_timeout(
+                    plc.read(),
+                    f"{plc.name} read",
+                )
                 if isinstance(data, dict):
                     value = data.get(tag)
                 else:
@@ -313,7 +358,10 @@ class AsyncPLCManager:
         """
         try:
             for tag, value in data.items():
-                await plc.write(tag, value)
+                await self._run_with_timeout(
+                    plc.write(tag, value),
+                    f"{plc.name} write({tag})",
+                )
                 tag_type = self._classify_tag(tag)
                 formatted = self._format_value(tag, value)
                 logger.info(f"[WRITE] {plc.name}.{tag} [{tag_type}] <- {formatted}")

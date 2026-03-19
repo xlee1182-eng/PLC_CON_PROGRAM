@@ -17,18 +17,20 @@
       ]
     },
     "MITSUBISHI":{
-      "USEYN": "N",
+      "USEYN": "Y",
       "NAME": "MITSU_PLC_1",
       "IP": "192.168.2.210",
       "PORT": 3000,
       "TAGS": [
+        "D100",
+        "D5",
         "D1001",
         "D1002",
         "D1003"
       ]
     },
     "OPCDA":{
-      "USEYN": "Y",
+      "USEYN": "N",
       "NAME": "OPCDA_PLC_1",
       "IP": "localhost",
       "PORT": 0,

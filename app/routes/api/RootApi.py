@@ -1,14 +1,37 @@
+from pathlib import Path
+from typing import Any
+from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Body
+from fastapi.responses import FileResponse
 from loguru import logger
 ## functions
 import app.functions.CommonFunction as __FUNCTION_COMMON
 import app.jobs.plcjob as __JOB_PLC
 
 router = APIRouter()
+WEB_PAGE_PATH = Path(__file__).resolve().parents[2] / 'web' / 'dashboard.html'
+
+
+class PLCReadRequest(BaseModel):
+  plc_name: str
+  tag: str
+
+
+class PLCWriteRequest(BaseModel):
+  plc_name: str
+  tag: str
+  value: Any
 
 @router.get('/')
 def root():
   return __FUNCTION_COMMON.RESPONSEFORMAT('OK', 'The PLC_CON_Program is running now.', None)
+
+
+@router.get('/web')
+def web_dashboard():
+  if not WEB_PAGE_PATH.exists():
+    raise HTTPException(status_code = 404, detail = 'dashboard.html not found')
+  return FileResponse(str(WEB_PAGE_PATH))
 
 @router.post('/api')
 def api():
@@ -56,6 +79,52 @@ async def plc_read(plc_name: str, tag: str):
       'plcName': plc_name,
       'tag': tag,
       'value': value
+    })
+  except HTTPException:
+    raise
+  except Exception as e:
+    logger.error(f"API route fatal error: {e}")
+    raise HTTPException(status_code = 500, detail = str(e))
+
+
+@router.post('/api/plc/read-tag')
+async def plc_read_tag(payload: PLCReadRequest):
+
+  try:
+    plc_manager = __JOB_PLC.GET_PLC_MANAGER()
+
+    if plc_manager is None:
+      raise HTTPException(status_code = 503, detail = 'PLC manager is not ready')
+
+    value = await plc_manager.read_by_name(payload.plc_name, payload.tag)
+
+    return __FUNCTION_COMMON.RESPONSEFORMAT('OK', 'Read command success', {
+      'plcName': payload.plc_name,
+      'tag': payload.tag,
+      'value': value
+    })
+  except HTTPException:
+    raise
+  except Exception as e:
+    logger.error(f"API route fatal error: {e}")
+    raise HTTPException(status_code = 500, detail = str(e))
+
+
+@router.post('/api/plc/write-tag')
+async def plc_write_tag(payload: PLCWriteRequest):
+
+  try:
+    plc_manager = __JOB_PLC.GET_PLC_MANAGER()
+
+    if plc_manager is None:
+      raise HTTPException(status_code = 503, detail = 'PLC manager is not ready')
+
+    await plc_manager.write_by_name(payload.plc_name, {payload.tag: payload.value})
+
+    return __FUNCTION_COMMON.RESPONSEFORMAT('OK', 'Write command sent to PLC.', {
+      'plcName': payload.plc_name,
+      'tag': payload.tag,
+      'value': payload.value
     })
   except HTTPException:
     raise

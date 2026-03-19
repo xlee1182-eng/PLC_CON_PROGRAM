@@ -1,0 +1,15 @@
+참고: 옵션 정리
+옵션	         의미
+-D	             폴더형 exe
+-F	             단일 exe
+-W               콘솔창 숨김 (GUI 프로그램용)
+-i               exe 아이콘 설정(ex)pyinstaller -i icon.ico main.py)
+-n               exe 이름 변경(ex)pyinstaller -n MyProgram main.py)
+--clean	         build 캐시 삭제
+-y	             dist 자동 삭제
+--hidden-import	 누락된 모듈 추가
+--collect-all	 패키지 전체 포함
+
+
+pyinstaller -D server.py -y --clean --hidden-import=app.main --collect-all cryptography
+

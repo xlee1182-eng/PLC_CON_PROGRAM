@@ -202,9 +202,9 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
                 return value
             except Exception as e:
                 logger.error(f"{self.name} OPC UA read error: {e}")
-                # await self._invalidate_connection()
-                # self.retry_count += 1
-                # await backoff_retry(self.retry_count)
+                await self._invalidate_connection()
+                self.retry_count += 1
+                await backoff_retry(self.retry_count)
                 return None
 
     async def read_tag(self, address):
@@ -220,9 +220,9 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
                 return await node.read_value()
             except Exception as e:
                 logger.error(f"{self.name} OPC UA read_tag error: {e}")
-                # await self._invalidate_connection()
-                # self.retry_count += 1
-                # await backoff_retry(self.retry_count)
+                await self._invalidate_connection()
+                self.retry_count += 1
+                await backoff_retry(self.retry_count)
                 return None
 
     async def write(self, address, value):
@@ -250,9 +250,9 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
                     await node.write_value(casted_value)
             except Exception as e:
                 logger.error(f"{self.name} OPC UA write error: {e}")
-                # await self._invalidate_connection()
-                # self.retry_count += 1
-                # await backoff_retry(self.retry_count)
+                await self._invalidate_connection()
+                self.retry_count += 1
+                await backoff_retry(self.retry_count)
                 raise
 
     async def close(self):
