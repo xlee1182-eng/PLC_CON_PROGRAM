@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 from typing import Any
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Body
@@ -9,7 +10,18 @@ import app.functions.CommonFunction as __FUNCTION_COMMON
 import app.jobs.plcjob as __JOB_PLC
 
 router = APIRouter()
-WEB_PAGE_PATH = Path(__file__).resolve().parents[2] / 'web' / 'dashboard.html'
+
+
+def _resolve_web_page_path() -> Path:
+  # PyInstaller onefile/onedir extracts bundled data under _MEIPASS.
+  if getattr(sys, 'frozen', False):
+    meipass = getattr(sys, '_MEIPASS', None)
+    if meipass:
+      return Path(meipass) / 'app' / 'web' / 'dashboard.html'
+  return Path(__file__).resolve().parents[2] / 'web' / 'dashboard.html'
+
+
+WEB_PAGE_PATH = _resolve_web_page_path()
 
 
 class PLCReadRequest(BaseModel):

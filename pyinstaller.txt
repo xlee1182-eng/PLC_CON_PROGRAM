@@ -8,8 +8,16 @@
 --clean	         build 캐시 삭제
 -y	             dist 자동 삭제
 --hidden-import	 누락된 모듈 추가
+--add-data       정적 파일 포함 (html/json/ini 등)
 --collect-all	 패키지 전체 포함
 
+오류 원인
+- app.web.dashboard.html 은 파이썬 모듈이 아니라 파일이라 --hidden-import 로 넣을 수 없음
 
-pyinstaller -D server.py -y --clean --hidden-import=app.main --collect-all cryptography
+권장 명령 (Windows)
+- 폴더형(onedir)
+pyinstaller -D server.py -y --clean --hidden-import=app.main --add-data "app/web/dashboard.html;app/web"
+
+- 단일파일(onefile)
+pyinstaller -F server.py -y --clean --hidden-import=app.main --add-data "app/web/dashboard.html;app/web"
 
