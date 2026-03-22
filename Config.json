@@ -1,23 +1,39 @@
 {
 
-  "PLC_INFO": {
-    "OPCUA":{
+  "PLC_LIST": [
+    {
+      "TYPE": "OPCUA",
       "USEYN": "Y",
       "NAME": "OPCUA_PLC_1",
       "IP": "127.0.0.1",
       "PORT": 49320,
       "TAGS": [
-        "ns=2;s=Channel2.Device2.B0",
-        "ns=2;s=Channel2.Device2.D1001",
-        "ns=2;s=Channel2.Device2.D1002",
-        "ns=2;s=Channel2.Device2.D1003",
-        "ns=2;s=Channel2.Device2.D1004",
-        "ns=2;s=Channel2.Device2.D1005",
-        "ns=2;s=Channel2.Device2.D1006"
+        "ns=2;s=Channel1.Device1.TAG01",
+        "ns=2;s=Channel1.Device1.TAG02",
+        "ns=2;s=Channel1.Device1.TAG03",
+        "ns=2;s=Channel1.Device1.TAG04",
+        "ns=2;s=Channel1.Device1.TAG05",
+        "ns=2;s=Channel1.Device2.TAG06",
+        "ns=2;s=Channel1.Device2.TAG07"
       ]
     },
-    "MITSUBISHI":{
+    {
+      "TYPE": "OPCUA",
       "USEYN": "Y",
+      "NAME": "OPCUA_PLC_2",
+      "IP": "127.0.0.1",
+      "PORT": 49320,
+      "TAGS": [
+        "ns=2;s=Channel2.Device1.DAY_CNT",
+        "ns=2;s=Channel2.Device1.S_FLAG",
+        "ns=2;s=Channel2.Device1.SHIFT_CNT",
+        "ns=2;s=Channel2.Device1.SPEC_NAME",
+        "ns=2;s=Channel2.Device1.TOTAL_CNT"
+      ]
+    },
+    {
+      "TYPE": "MITSUBISHI",
+      "USEYN": "N",
       "NAME": "MITSU_PLC_1",
       "IP": "192.168.2.210",
       "PORT": 3000,
@@ -29,7 +45,8 @@
         "D1003"
       ]
     },
-    "OPCDA":{
+    {
+      "TYPE": "OPCDA",
       "USEYN": "N",
       "NAME": "OPCDA_PLC_1",
       "IP": "localhost",
@@ -41,7 +58,8 @@
         "Channel1.Device1.D1003"
       ]
     },
-    "SIEMENS": {
+    {
+      "TYPE": "SIEMENS",
       "USEYN": "N",
       "NAME": "S7_PLC_1",
       "IP": "192.168.2.211",
@@ -50,7 +68,8 @@
       "SLOT": 1,
       "TAGS": ["DB0.DBX0.0", "DB0.DBX0.1", "DB0.DBX0.2", "DB0.DBX0.3", "DB0.DBX0.4"]
     },
-    "ROCKWELL": {
+    {
+      "TYPE": "ROCKWELL",
       "USEYN": "N",
       "NAME": "AB_PLC_1",
       "IP": "192.168.0.20",
@@ -65,7 +84,7 @@
       },
       "TAGS": ["Tag_A", "Program:MainProgram.Tag_B"]
     }
-  }
+  ]
 
 
 }

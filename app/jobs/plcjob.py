@@ -21,13 +21,15 @@ async def START():
     
     try:
 
-        for plc_type, plc_config in APPCONFIG['PLC_INFO'].items():
-            if plc_config['USEYN'] == 'Y':
+        for plc_config in APPCONFIG.get('PLC_LIST', []):
+            if plc_config.get('USEYN') == 'Y':
                 try:
+                    plc_type = plc_config.get('TYPE')
                     plc = create_driver(plc_type, plc_config)
                     plc_list.append(plc)
                 except Exception as e:
-                    logger.error(f'PLC build error ({plc_type}): {e}')
+                    plc_name = plc_config.get('NAME', 'Unknown')
+                    logger.error(f'PLC build error ({plc_name}): {e}')
 
         # ------------------------------------------------------------------
         # start the manager with all configured PLCs
