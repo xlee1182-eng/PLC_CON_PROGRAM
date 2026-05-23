@@ -137,7 +137,7 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
 
         event = {
             "plc": self.name,
-            "tag": str(node.nodeid),
+            "tag": str(node.nodeid.Identifier),
             "value": value,
             "source_timestamp": None,
         }
