@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from loguru import logger
 ## functions
 import app.functions.CommonFunction as __FUNCTION_COMMON
-import app.jobs.plcjob as __JOB_PLC
+import app.jobs.PlcJob as __JOB_PLC
 
 router = APIRouter()
 

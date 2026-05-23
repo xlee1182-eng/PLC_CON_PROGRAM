@@ -3,6 +3,10 @@ import signal
 import os
 from loguru import logger
 
+# Global dictionary to expose latest PLC tag values per PLC.
+# 구조: { plc_name: { tag: {"tag_type": str, "value": Any} } }
+PLC_DATA_VIEW = {}
+
 class AsyncPLCManager:
 
     def __init__(self, plc_list):
@@ -91,6 +95,13 @@ class AsyncPLCManager:
         value = event.get("value")
         tag_type = self._classify_tag(tag)
         formatted = self._format_value(tag, value)
+        # update global view for external consumers
+        if plc_name is not None and tag is not None:
+            plc_store = PLC_DATA_VIEW.setdefault(plc_name, {})
+            plc_store[tag] = {
+                "tag_type": tag_type,
+                "value": value,
+            }
         logger.info(f"[EVENT] {plc_name}.{tag} [{tag_type}] -> {formatted}")
 
         for handler in list(self._change_handlers):
@@ -345,6 +356,15 @@ class AsyncPLCManager:
             tag_type = self._classify_tag(tag)
             formatted = self._format_value(tag, value)
             logger.info(f"[READ] {plc.name}.{tag} [{tag_type}] -> {formatted}")
+
+            # update global view with latest read
+            # if tag is not None:
+            #     plc_store = PLC_DATA_VIEW.setdefault(plc.name, {})
+            #     plc_store[tag] = {
+            #         "tag_type": tag_type,
+            #         "value": value,
+            #     }
+
             return value
 
         except Exception as e:
@@ -365,6 +385,14 @@ class AsyncPLCManager:
                 tag_type = self._classify_tag(tag)
                 formatted = self._format_value(tag, value)
                 logger.info(f"[WRITE] {plc.name}.{tag} [{tag_type}] <- {formatted}")
+                
+                # update global view with latest written value
+                # if tag is not None:
+                #     plc_store = PLC_DATA_VIEW.setdefault(plc.name, {})
+                #     plc_store[tag] = {
+                #         "tag_type": tag_type,
+                #         "value": value,
+                #     }
 
             return True
 

@@ -7,27 +7,31 @@ from contextlib import asynccontextmanager
 import asyncio
 
 #jobs
-import app.jobs.plcjob as __JOB_PLC
+import app.jobs.PlcJob as __JOB_PLC
+
+import app.jobs.MyJob as __JOB_MY
 
 ## routes
 import app.routes.index as __ROUTE_INDEX
 
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-  # START()를 background task로 실행하여 서버 시작 시 블로킹을 방지
+  # START() 호출 - MyJob과 PlcJob 초기화
+  __JOB_MY.START()
   task = asyncio.create_task(__JOB_PLC.START())
   app.state.plc_task = task
   yield
   # 서버 종료 시 매니저 정리 후 백그라운드 task 취소
+  __JOB_MY.STOP()
   await __JOB_PLC.STOP()
   task.cancel()
   try:
     await task
   except asyncio.CancelledError:
     pass
-
 
 app = FastAPI(lifespan=lifespan)
 
