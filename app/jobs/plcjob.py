@@ -8,11 +8,8 @@ import app.configs.AppConfig as __CONFIG_APPCONFIG
 APPCONFIG = __CONFIG_APPCONFIG.GET()
 PLC_MANAGER = None
 
-
 def GET_PLC_MANAGER():
     return PLC_MANAGER
-
-
 
 async def START():
     global PLC_MANAGER
@@ -39,7 +36,6 @@ async def START():
 
     except Exception as e:
         logger.error(f'PLC job start error: {e}')
-
 
 async def STOP():
     global PLC_MANAGER
