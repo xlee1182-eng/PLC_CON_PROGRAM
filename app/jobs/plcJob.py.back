@@ -1,4 +1,4 @@
-# import asyncio
+import asyncio
 from loguru import logger
 # from fastapi import APIRouter, Request
 from app.plc_drivers.driver_factory import create_driver
@@ -47,3 +47,5 @@ async def STOP():
         await PLC_MANAGER.stop()
     finally:
         PLC_MANAGER = None
+
+
