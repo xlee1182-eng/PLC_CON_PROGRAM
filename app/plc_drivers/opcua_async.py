@@ -135,9 +135,15 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
         if self._change_callback is None:
             return
 
+        tag_value = None
+        try:
+            tag_value = node.nodeid.to_string()
+        except Exception:
+            tag_value = str(node.nodeid)
+
         event = {
             "plc": self.name,
-            "tag": str(node.nodeid.Identifier),
+            "tag": tag_value,
             "value": value,
             "source_timestamp": None,
         }

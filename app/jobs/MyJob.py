@@ -16,7 +16,7 @@ def print_plc_data():
     try:
         while not _stop_event.is_set():
 
-            _stop_event.wait(5)
+            _stop_event.wait(10)
 
             if not PLC_DATA_VIEW:
                 logger.warning("PLC_DATA_VIEW is empty")

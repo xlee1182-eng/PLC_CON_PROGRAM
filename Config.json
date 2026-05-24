@@ -10,13 +10,16 @@
       "TAGS": [
         "ns=2;s=Channel9.Device1.TAG01",
         "ns=2;s=Channel9.Device1.TAG02",
+        "ns=2;s=Channel9.Device1.TAG03",
         "ns=2;s=Channel9.Device1.TAG04",
-        "ns=2;s=Channel9.Device1.TAG05"
+        "ns=2;s=Channel9.Device1.TAG05",
+        "ns=2;s=Channel9.Device1.TAG06",
+        "ns=2;s=Channel9.Device1.TAG07"
       ]
     },
     {
       "TYPE": "OPCUA",
-      "USEYN": "N",
+      "USEYN": "Y",
       "NAME": "OPCUA_PLC_2",
       "IP": "127.0.0.1",
       "PORT": 49320,
@@ -25,7 +28,8 @@
         "ns=2;s=Channel2.Device1.S_FLAG",
         "ns=2;s=Channel2.Device1.SHIFT_CNT",
         "ns=2;s=Channel2.Device1.SPEC_NAME",
-        "ns=2;s=Channel2.Device1.TOTAL_CNT"
+        "ns=2;s=Channel2.Device1.TOTAL_CNT",
+        "ns=2;s=Channel2.Device1.B_FLAG"
       ]
     },
     {

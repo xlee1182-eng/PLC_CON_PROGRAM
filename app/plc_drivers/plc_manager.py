@@ -43,6 +43,18 @@ class AsyncPLCManager:
             if plc.name in self._plc_map:
                 raise ValueError(f"Duplicate PLC name: {plc.name}")
             self._plc_map[plc.name] = plc
+            
+            # Initialize PLC_DATA_VIEW with default values based on tags
+            if plc.name not in PLC_DATA_VIEW:
+                PLC_DATA_VIEW[plc.name] = {}
+                if hasattr(plc, 'tags') and plc.tags:
+                    for tag in plc.tags:
+                        PLC_DATA_VIEW[plc.name][tag] = {
+                            "tag_type": self._classify_tag(tag),
+                            "value": None,
+                        }
+
+            logger.info(f"Registered PLC: {plc.name} ({getattr(plc, 'driver_type', plc.__class__.__name__)})")
 
     def get_plc(self, plc_name: str):
         plc = self._plc_map.get(plc_name)
@@ -93,7 +105,7 @@ class AsyncPLCManager:
         plc_name = event.get("plc")
         tag = event.get("tag")
         value = event.get("value")
-        tag_type = self._classify_tag(tag)
+        tag_type = self._classify_tag(tag, value)
         formatted = self._format_value(tag, value)
         # update global view for external consumers
         if plc_name is not None and tag is not None:
@@ -112,13 +124,34 @@ class AsyncPLCManager:
             except Exception as e:
                 logger.error(f"change handler error: {e}")
 
-    def _classify_tag(self, tag):
-        """Return a simple classification string for the given tag.
+    def _classify_tag(self, tag, value=None):
+        """Classify a tag into a simple type string.
 
-        This is used primarily for logging to annotate each entry with a
-        human‑readable type hint.  The categories are intentionally loose and
-        can be expanded as needed.
+        Prefer to classify by the actual `value` type when available. If
+        `value` is None or cannot be used, fall back to the original
+        heuristic based on the `tag` string.
         """
+        # If a value is provided, use its Python type to determine category.
+        if value is not None:
+            # booleans are semantically bits
+            if isinstance(value, bool):
+                return "bit"
+            # ints/floats are numeric words
+            if isinstance(value, (int, float)):
+                return "word"
+            # strings likely represent textual/node names
+            if isinstance(value, str):
+                return "string"
+            # bytes/bytearray represent raw binary
+            if isinstance(value, (bytes, bytearray)):
+                return "bytes"
+            # complex containers
+            if isinstance(value, (list, tuple, dict)):
+                return "complex"
+            
+        return "node"
+    
+        # Fallback to tag-based heuristics (keeps previous behavior)
         if not isinstance(tag, str):
             return "unknown"
         t = tag.upper()
@@ -163,7 +196,7 @@ class AsyncPLCManager:
                     # output is easier to trace in a long-running poll loop.
                     if isinstance(data, dict):
                         for tag, value in data.items():
-                            tag_type = self._classify_tag(tag)
+                            tag_type = self._classify_tag(tag, value)
                             formatted = self._format_value(tag, value)
                             logger.info(f"{plc.name}.{tag} [{tag_type}] -> {formatted}")
                     else:
@@ -353,7 +386,7 @@ class AsyncPLCManager:
                 else:
                     value = data
 
-            tag_type = self._classify_tag(tag)
+            tag_type = self._classify_tag(tag, value)
             formatted = self._format_value(tag, value)
             logger.info(f"[READ] {plc.name}.{tag} [{tag_type}] -> {formatted}")
 
@@ -382,7 +415,7 @@ class AsyncPLCManager:
                     plc.write(tag, value),
                     f"{plc.name} write({tag})",
                 )
-                tag_type = self._classify_tag(tag)
+                tag_type = self._classify_tag(tag, value)
                 formatted = self._format_value(tag, value)
                 logger.info(f"[WRITE] {plc.name}.{tag} [{tag_type}] <- {formatted}")
                 
