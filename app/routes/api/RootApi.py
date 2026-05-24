@@ -2,9 +2,12 @@ from pathlib import Path
 import sys
 from typing import Any
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Request
 from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
+import json
 from loguru import logger
+import asyncio
 ## functions
 import app.functions.CommonFunction as __FUNCTION_COMMON
 import app.jobs.PlcJob as __JOB_PLC
@@ -22,6 +25,41 @@ def _resolve_web_page_path() -> Path:
 
 
 WEB_PAGE_PATH = _resolve_web_page_path()
+
+
+@router.get('/sse/plc_data')
+async def sse_plc_data(request: Request):
+  """Server-Sent Events endpoint that streams PLC_DATA_VIEW snapshots as JSON."""
+  from app.plc_drivers.plc_manager import PLC_DATA_VIEW
+
+  async def event_generator():
+    last = None
+    while True:
+      if await request.is_disconnected():
+        break
+
+      try:
+        payload = json.dumps(PLC_DATA_VIEW, default=str)
+      except Exception:
+        payload = json.dumps({})
+
+      if payload != last:
+        last = payload
+        yield f"data: {payload}\n\n"
+
+      try:
+        await asyncio.sleep(1.0)
+      except asyncio.CancelledError:
+        break
+
+  return StreamingResponse(
+    event_generator(),
+    media_type='text/event-stream',
+    headers={
+      'Cache-Control': 'no-cache',
+      'X-Accel-Buffering': 'no',
+    },
+  )
 
 
 class PLCReadRequest(BaseModel):

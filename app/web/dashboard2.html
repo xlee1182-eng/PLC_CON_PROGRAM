@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PLC Dashboard 2</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 12px; }
+    h1 { font-size: 1.4rem; margin-bottom: 8px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; grid-auto-rows: auto; }
+    .card { border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+    .plc-name { font-weight: 700; margin-bottom: 6px; }
+    .tag-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding: 6px 0; border-top:1px solid #f1f1f1; }
+    .tag-row:first-of-type { border-top: none; }
+    .tag-meta { display:flex; gap:8px; align-items:center; }
+    .controls { display:flex; gap:8px; align-items:center; }
+    .tag-name { font-family: monospace; }
+    .write-input { width:80px; padding:3px 6px; font-size:0.9rem; }
+    .write-btn { padding:4px 8px; }
+    .status { font-size:0.9rem; color:#666; }
+    .page-header { position: sticky; top: 0; background: white; z-index: 10; padding-bottom: 8px; }
+    #sse-status { font-weight: 600; }
+    #sse-status.connected { color: #0066cc; }
+    #sse-status.error { color: #cc0000; }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <h1>PLC Dashboard 2 (Grid)</h1>
+    <div class="status">SSE 상태: <span id="sse-status">연결 전</span></div>
+  </header>
+  <div class="grid" id="plc-grid"></div>
+
+  <script>
+    const grid = document.getElementById('plc-grid')
+    const sseStatus = document.getElementById('sse-status')
+
+    function encodeId(s) {
+      return btoa(unescape(encodeURIComponent(s))).replace(/=+$/, '')
+    }
+
+    function createPlcCard(plcName) {
+      const card = document.createElement('div')
+      card.className = 'card'
+      card.id = `card_${encodeId(plcName)}`
+      const title = document.createElement('div')
+      title.className = 'plc-name'
+      title.textContent = plcName
+      card.appendChild(title)
+
+      const container = document.createElement('div')
+      container.id = `container_${encodeId(plcName)}`
+      card.appendChild(container)
+      return card
+    }
+
+    function createTagRow(plcName, tag, entry) {
+      const row = document.createElement('div')
+      row.className = 'tag-row'
+      row.id = `row_${encodeId(plcName)}_${encodeId(tag)}`
+
+      const meta = document.createElement('div')
+      meta.className = 'tag-meta'
+      const name = document.createElement('div')
+      name.className = 'tag-name'
+      name.textContent = tag
+      const type = document.createElement('div')
+      type.style.color = '#666'
+      type.id = `type_${encodeId(plcName)}_${encodeId(tag)}`
+      type.textContent = `[${entry.tag_type || 'unknown'}]`
+      meta.appendChild(name)
+      meta.appendChild(type)
+
+      const controls = document.createElement('div')
+      controls.className = 'controls'
+      const val = document.createElement('span')
+      val.textContent = String(entry.value)
+      val.id = `val_${encodeId(plcName)}_${encodeId(tag)}`
+
+      const input = document.createElement('input')
+      input.className = 'write-input'
+      input.placeholder = '값 입력'
+      input.id = `in_${encodeId(plcName)}_${encodeId(tag)}`
+
+      const btn = document.createElement('button')
+      btn.className = 'write-btn'
+      btn.textContent = '쓰기'
+      btn.addEventListener('click', () => writeTag(plcName, tag, input.value, btn))
+
+      controls.appendChild(val)
+      controls.appendChild(input)
+      controls.appendChild(btn)
+
+      row.appendChild(meta)
+      row.appendChild(controls)
+      return row
+    }
+
+    function updatePlcCard(plcName, tags) {
+      const container = document.getElementById(`container_${encodeId(plcName)}`)
+      if (!container) return
+
+      // Track existing rows to remove missing ones later
+      const existingRows = new Set()
+      Array.from(container.querySelectorAll('.tag-row')).forEach(r => existingRows.add(r.id))
+
+      for (const [tag, entry] of Object.entries(tags || {})) {
+        const rowId = `row_${encodeId(plcName)}_${encodeId(tag)}`
+        existingRows.delete(rowId)
+
+        let row = document.getElementById(rowId)
+        if (!row) {
+          row = createTagRow(plcName, tag, entry)
+          container.appendChild(row)
+        } else {
+          // update displayed value and type, but preserve input if focused
+          const valSpan = document.getElementById(`val_${encodeId(plcName)}_${encodeId(tag)}`)
+          if (valSpan) valSpan.textContent = String(entry.value)
+          const typeDiv = document.getElementById(`type_${encodeId(plcName)}_${encodeId(tag)}`)
+          if (typeDiv) typeDiv.textContent = `[${entry.tag_type || 'unknown'}]`
+          const input = document.getElementById(`in_${encodeId(plcName)}_${encodeId(tag)}`)
+          if (input && document.activeElement !== input) {
+            // only overwrite input when it's not focused
+            input.value = ''
+          }
+        }
+      }
+
+      // Remove rows that are no longer present
+      existingRows.forEach(rid => {
+        const el = document.getElementById(rid)
+        if (el) el.remove()
+      })
+    }
+
+    function renderSnapshot(snapshot) {
+      // Add or update cards
+      for (const [plcName, tags] of Object.entries(snapshot || {})) {
+        let card = document.getElementById(`card_${encodeId(plcName)}`)
+        if (!card) {
+          card = createPlcCard(plcName)
+          grid.appendChild(card)
+        }
+        updatePlcCard(plcName, tags)
+      }
+
+      // Remove cards not in snapshot
+      Array.from(grid.children).forEach(card => {
+        const plcId = card.id && card.id.startsWith('card_') ? card.id.slice(5) : null
+        if (plcId && !(Object.keys(snapshot || {}).some(n => encodeId(n) === plcId))) {
+          card.remove()
+        }
+      })
+    }
+
+    async function writeTag(plcName, tag, value, btn) {
+      try {
+        btn.disabled = true
+        const resp = await fetch('/api/plc/write-tag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plc_name: plcName, tag: tag, value: value })
+        })
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}))
+          throw new Error(data.detail || 'write failed')
+        }
+      } catch (e) {
+        alert('쓰기 실패: ' + e.message)
+      } finally {
+        btn.disabled = false
+      }
+    }
+
+    // SSE
+    const es = new EventSource('/sse/plc_data')
+    es.onopen = () => { 
+      sseStatus.textContent = '연결됨'
+      sseStatus.className = 'connected'
+    }
+    es.onerror = () => { 
+      sseStatus.textContent = '에러/연결 끊김'
+      sseStatus.className = 'error'
+    }
+    es.onmessage = (evt) => {
+      try {
+        const payload = JSON.parse(evt.data)
+        renderSnapshot(payload)
+      } catch (e) {
+        console.error('SSE parse error', e)
+      }
+    }
+
+    const closeSse = () => {
+      if (es) {
+        es.close()
+      }
+    }
+
+    window.addEventListener('beforeunload', closeSse)
+    window.addEventListener('unload', closeSse)
+    window.addEventListener('pagehide', closeSse)
+  </script>
+</body>
+</html>
