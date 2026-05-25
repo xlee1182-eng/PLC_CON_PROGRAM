@@ -173,6 +173,37 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
                     return False
             return await self._subscribe_datachange_no_lock(callback, publishing_interval)
 
+    async def _monitor_watchdog_health(self):
+        """Monitor asyncua's internal watchdog loop for failures and trigger reconnection if needed."""
+        watch_interval = 5  # Check every 5 seconds
+        
+        while self.connected and self.client is not None:
+            try:
+                await asyncio.sleep(watch_interval)
+                
+                # Check if asyncua's internal monitor task has failed
+                if hasattr(self.client, '_monitor_server_loop_handle'):
+                    task = self.client._monitor_server_loop_handle
+                    if task.done():
+                        try:
+                            # This will raise the exception if the task failed
+                            task.result()
+                        except asyncio.CancelledError:
+                            # Normal cancellation is okay
+                            pass
+                        except Exception as e:
+                            logger.error(f"{self.name} watchdog loop failed: {e}")
+                            await self._invalidate_connection()
+                            self.retry_count += 1
+                            await backoff_retry(self.retry_count)
+                            return
+                            
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug(f"{self.name} watchdog health check error: {e}")
+                break
+
     async def unsubscribe_datachange(self):
         async with self._io_lock:
             if self._subscription is None:

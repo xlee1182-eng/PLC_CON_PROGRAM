@@ -43,16 +43,21 @@ class AsyncPLCManager:
             if plc.name in self._plc_map:
                 raise ValueError(f"Duplicate PLC name: {plc.name}")
             self._plc_map[plc.name] = plc
-            
-            # Initialize PLC_DATA_VIEW with default values based on tags
+
+            # Initialize PLC_DATA_VIEW with structured layout:
+            # { connected: bool, tags: { tag: {tag_type, value} } }
             if plc.name not in PLC_DATA_VIEW:
-                PLC_DATA_VIEW[plc.name] = {}
+                tags_map = {}
                 if hasattr(plc, 'tags') and plc.tags:
                     for tag in plc.tags:
-                        PLC_DATA_VIEW[plc.name][tag] = {
+                        tags_map[tag] = {
                             "tag_type": self._classify_tag(tag),
                             "value": None,
                         }
+                PLC_DATA_VIEW[plc.name] = {
+                    "connected": bool(getattr(plc, 'connected', False)),
+                    "tags": tags_map,
+                }
 
             logger.info(f"Registered PLC: {plc.name} ({getattr(plc, 'driver_type', plc.__class__.__name__)})")
 
@@ -109,11 +114,15 @@ class AsyncPLCManager:
         formatted = self._format_value(tag, value)
         # update global view for external consumers
         if plc_name is not None and tag is not None:
-            plc_store = PLC_DATA_VIEW.setdefault(plc_name, {})
-            plc_store[tag] = {
-                "tag_type": tag_type,
-                "value": value,
-            }
+            # ensure PLC entry exists
+            plc_store = PLC_DATA_VIEW.setdefault(plc_name, {"connected": False, "tags": {}})
+            # mark PLC as connected since we received an event
+            plc_store["connected"] = True
+            tags_map = plc_store.setdefault("tags", {})
+            if tag in tags_map:
+                tags_map[tag]["value"] = value
+            else:
+                tags_map[tag] = {"tag_type": tag_type, "value": value}
         logger.info(f"[EVENT] {plc_name}.{tag} [{tag_type}] -> {formatted}")
 
         for handler in list(self._change_handlers):
@@ -162,6 +171,64 @@ class AsyncPLCManager:
         if t.startswith("NS=") or ":" in t:
             return "node"
         return "unknown"
+
+    def _format_value(self, tag, value):
+        """Format the read value based on its type and (optionally) tag.
+
+        Numeric values are kept unquoted, whereas strings are wrapped in
+        quotes so that logs clearly show they are text.  Additional logic can
+        be added later (e.g. decode bytes, apply units, etc.).
+        """
+        # Display strings as-is (no surrounding quotes) per user preference.
+        # Keep non-string values unchanged so numbers remain numeric.
+        return value
+
+    async def _health_check_loop(self):
+        """Periodically check connection status of all PLCs and attempt reconnection if needed."""
+        health_check_interval = 10  # Check every 10 seconds
+        
+        while self.running:
+            try:
+                await asyncio.sleep(health_check_interval)
+                
+                for plc in self.plc_list:
+                    try:
+                        # Skip health check for polling-based PLCs
+                        if not hasattr(plc, "subscribe_datachange"):
+                            continue
+                        
+                        # Check if PLC is disconnected or marked as unhealthy
+                        if not getattr(plc, "connected", False):
+                            # mark in global view
+                            plc_store = PLC_DATA_VIEW.setdefault(plc.name, {"connected": False, "tags": {}})
+                            plc_store["connected"] = False
+                            logger.warning(f"{plc.name} detected as disconnected, attempting reconnection...")
+                            try:
+                                # Attempt to reconnect
+                                await plc.connect()
+                                
+                                # If reconnected successfully, update status and try to re-subscribe
+                                if getattr(plc, "connected", False):
+                                    plc_store["connected"] = True
+                                    logger.info(f"{plc.name} reconnected, re-subscribing to data changes...")
+                                    try:
+                                        await plc.subscribe_datachange(self._on_change_event)
+                                        logger.info(f"{plc.name} successfully re-subscribed after reconnection")
+                                    except Exception as sub_e:
+                                        logger.error(f"{plc.name} failed to re-subscribe after reconnection: {sub_e}")
+                                else:
+                                    plc_store["connected"] = False
+                            except Exception as e:
+                                plc_store["connected"] = False
+                                logger.error(f"{plc.name} reconnection attempt failed: {e}")
+                    except Exception as plc_check_error:
+                        logger.error(f"Health check error for {plc.name}: {plc_check_error}")
+                        
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Health check loop error: {e}")
+                await asyncio.sleep(5)  # Wait before retrying after error
 
     def _format_value(self, tag, value):
         """Format the read value based on its type and (optionally) tag.
@@ -227,11 +294,20 @@ class AsyncPLCManager:
             try:
                 if hasattr(plc, "subscribe_datachange"):
                     subscribed = await plc.subscribe_datachange(self._on_change_event)
+                    if subscribed:
+                        PLC_DATA_VIEW.setdefault(plc.name, {"connected": False, "tags": {}})["connected"] = True
             except Exception as e:
                 logger.error(f"{plc.name} subscribe_datachange error: {e}")
 
             if not subscribed:
                 self._tasks.append(asyncio.create_task(self.poll_plc(plc)))
+            else:
+                # For subscribed PLCs, start watchdog monitoring
+                if hasattr(plc, "_monitor_watchdog_health"):
+                    self._tasks.append(asyncio.create_task(plc._monitor_watchdog_health()))
+
+        # Add health check task to detect and restore broken connections
+        self._tasks.append(asyncio.create_task(self._health_check_loop()))
 
         try:
             if self._tasks:

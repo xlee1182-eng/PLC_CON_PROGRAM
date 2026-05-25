@@ -21,20 +21,25 @@ def print_plc_data():
             if not PLC_DATA_VIEW:
                 logger.warning("PLC_DATA_VIEW is empty")
             else:
-                for plc_name, tags in PLC_DATA_VIEW.items():
-                    # print(f"PLC: {plc_name}")
-                    if not isinstance(tags, dict):
-                        # print(f"  unexpected data type: {type(tags).__name__}")
-                        logger.warning(f"  unexpected data type: {type(tags).__name__}")
+                for plc_name, plc_info in PLC_DATA_VIEW.items():
+                    if not isinstance(plc_info, dict):
+                        logger.warning(f"  unexpected data type: {type(plc_info).__name__}")
                         continue
-                    for tag, entry in tags.items():
+
+                    connected = plc_info.get("connected", False)
+                    tags_map = plc_info.get("tags", {})
+
+                    if not connected:
+                        logger.warning(f"PLC {plc_name} is disconnected")
+                        continue
+
+                    for tag, entry in tags_map.items():
                         if isinstance(entry, dict):
                             tag_type = entry.get("tag_type", "unknown")
                             value = entry.get("value")
                         else:
                             tag_type = "unknown"
                             value = entry
-                        # print(f"  {tag} [{tag_type}] = {value}")
                         logger.info(f"PLC:[{plc_name}.{tag}] TYPE:[{tag_type}] VALUE:[{value}]")
 
             # return
@@ -53,11 +58,19 @@ def print_plc_data_once():
         logger.warning("PLC_DATA_VIEW is empty")
         return
 
-    for plc_name, tags in PLC_DATA_VIEW.items():
-        if not isinstance(tags, dict):
-            logger.warning(f"  unexpected data type: {type(tags).__name__}")
+    for plc_name, plc_info in PLC_DATA_VIEW.items():
+        if not isinstance(plc_info, dict):
+            logger.warning(f"  unexpected data type: {type(plc_info).__name__}")
             continue
-        for tag, entry in tags.items():
+
+        connected = plc_info.get("connected", False)
+        tags_map = plc_info.get("tags", {})
+
+        if not connected:
+            logger.warning(f"PLC {plc_name} is disconnected")
+            continue
+
+        for tag, entry in tags_map.items():
             if isinstance(entry, dict):
                 tag_type = entry.get("tag_type", "unknown")
                 value = entry.get("value")
