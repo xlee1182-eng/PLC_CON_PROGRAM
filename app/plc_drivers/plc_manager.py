@@ -121,6 +121,7 @@ class AsyncPLCManager:
             tags_map = plc_store.setdefault("tags", {})
             if tag in tags_map:
                 tags_map[tag]["value"] = value
+                tags_map[tag]["tag_type"] = tag_type
             else:
                 tags_map[tag] = {"tag_type": tag_type, "value": value}
         logger.info(f"[EVENT] {plc_name}.{tag} [{tag_type}] -> {formatted}")
@@ -229,17 +230,6 @@ class AsyncPLCManager:
             except Exception as e:
                 logger.error(f"Health check loop error: {e}")
                 await asyncio.sleep(5)  # Wait before retrying after error
-
-    def _format_value(self, tag, value):
-        """Format the read value based on its type and (optionally) tag.
-
-        Numeric values are kept unquoted, whereas strings are wrapped in
-        quotes so that logs clearly show they are text.  Additional logic can
-        be added later (e.g. decode bytes, apply units, etc.).
-        """
-        # Display strings as-is (no surrounding quotes) per user preference.
-        # Keep non-string values unchanged so numbers remain numeric.
-        return value
 
     async def poll_plc(self, plc):
 
@@ -466,13 +456,11 @@ class AsyncPLCManager:
             formatted = self._format_value(tag, value)
             logger.info(f"[READ] {plc.name}.{tag} [{tag_type}] -> {formatted}")
 
-            # update global view with latest read
-            # if tag is not None:
-            #     plc_store = PLC_DATA_VIEW.setdefault(plc.name, {})
-            #     plc_store[tag] = {
-            #         "tag_type": tag_type,
-            #         "value": value,
-            #     }
+            # update global view with latest read and mark as connected
+            # plc_store = PLC_DATA_VIEW.setdefault(plc.name, {"connected": False, "tags": {}})
+            # plc_store["connected"] = True
+            # tags_map = plc_store.setdefault("tags", {})
+            # tags_map[tag] = {"tag_type": tag_type, "value": value}
 
             return value
 
@@ -495,13 +483,11 @@ class AsyncPLCManager:
                 formatted = self._format_value(tag, value)
                 logger.info(f"[WRITE] {plc.name}.{tag} [{tag_type}] <- {formatted}")
                 
-                # update global view with latest written value
-                # if tag is not None:
-                #     plc_store = PLC_DATA_VIEW.setdefault(plc.name, {})
-                #     plc_store[tag] = {
-                #         "tag_type": tag_type,
-                #         "value": value,
-                #     }
+                # update global view with latest written value and mark as connected
+                # plc_store = PLC_DATA_VIEW.setdefault(plc.name, {"connected": False, "tags": {}})
+                # plc_store["connected"] = True
+                # tags_map = plc_store.setdefault("tags", {})
+                # tags_map[tag] = {"tag_type": tag_type, "value": value}
 
             return True
 

@@ -22,6 +22,11 @@
     #sse-status { font-weight: 600; }
     #sse-status.connected { color: #0066cc; }
     #sse-status.error { color: #cc0000; }
+    .plc-header { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .plc-name { font-weight:700; }
+    .conn-badge { font-size:0.75rem; font-weight:600; padding:2px 7px; border-radius:10px; }
+    .conn-badge.online  { background:#d4edda; color:#155724; }
+    .conn-badge.offline { background:#f8d7da; color:#721c24; }
   </style>
 </head>
 <body>
@@ -43,10 +48,19 @@
       const card = document.createElement('div')
       card.className = 'card'
       card.id = `card_${encodeId(plcName)}`
+
+      const header = document.createElement('div')
+      header.className = 'plc-header'
       const title = document.createElement('div')
       title.className = 'plc-name'
       title.textContent = plcName
-      card.appendChild(title)
+      const badge = document.createElement('span')
+      badge.className = 'conn-badge offline'
+      badge.id = `conn_${encodeId(plcName)}`
+      badge.textContent = '연결 안됨'
+      header.appendChild(title)
+      header.appendChild(badge)
+      card.appendChild(header)
 
       const container = document.createElement('div')
       container.id = `container_${encodeId(plcName)}`
@@ -135,12 +149,23 @@
 
     function renderSnapshot(snapshot) {
       // Add or update cards
-      for (const [plcName, tags] of Object.entries(snapshot || {})) {
+      for (const [plcName, plcData] of Object.entries(snapshot || {})) {
         let card = document.getElementById(`card_${encodeId(plcName)}`)
         if (!card) {
           card = createPlcCard(plcName)
           grid.appendChild(card)
         }
+
+        // Update connected badge
+        const badge = document.getElementById(`conn_${encodeId(plcName)}`)
+        if (badge) {
+          const online = plcData.connected === true
+          badge.textContent = online ? '연결됨' : '연결 안됨'
+          badge.className = 'conn-badge ' + (online ? 'online' : 'offline')
+        }
+
+        // New structure has .tags sub-object; fall back to whole object for compatibility
+        const tags = (plcData && typeof plcData.tags === 'object') ? plcData.tags : plcData
         updatePlcCard(plcName, tags)
       }
 

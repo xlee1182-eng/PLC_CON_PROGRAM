@@ -12,6 +12,10 @@ class _OPCUADataChangeHandler:
     def datachange_notification(self, node, val, data):
         self._plc.on_datachange(node, val, data)
 
+    def status_change_notification(self, data):
+        # Handle subscription status changes from the server (e.g. session timeout)
+        self._plc.on_status_change(data)
+
 
 class AsyncOPCUAPLC(BaseAsyncPLC):
 
@@ -161,6 +165,20 @@ class AsyncOPCUAPLC(BaseAsyncPLC):
                 asyncio.create_task(result)
         except Exception as e:
             logger.error(f"{self.name} datachange callback error: {e}")
+
+    def on_status_change(self, data):
+        """Handle status change notifications by treating them as connection loss."""
+        status = getattr(data, "Status", data)
+        logger.warning(f"{self.name} OPC UA status change notification: {status}")
+        # Since this is called from the internal subscription loop, we schedule
+        # the reconnection logic in a background task.
+        if self.connected:
+            asyncio.create_task(self._handle_status_disconnect())
+
+    async def _handle_status_disconnect(self):
+        await self._invalidate_connection()
+        self.retry_count += 1
+        await backoff_retry(self.retry_count)
 
     async def subscribe_datachange(self, callback, publishing_interval=100):
         self._change_callback = callback
