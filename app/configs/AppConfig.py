@@ -45,7 +45,7 @@ def SET():
                 logger.error('FAIL', 'Could not get app configuration..')
             
         logger.info(f'================================================================')
-        logger.info(f'LAST UPDATED DATE: 2026-05-25')
+        logger.info(f'LAST UPDATED DATE: 2026-05-26')
         logger.info(f'USE LOCAL FILE: {configData['USE_LOCAL_FILE']}')
         for plc_config in APPCONFIG['PLC_LIST']:
             if plc_config.get('USEYN') == 'Y':

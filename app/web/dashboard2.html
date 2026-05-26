@@ -5,34 +5,119 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>PLC Dashboard 2</title>
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; margin: 12px; }
-    h1 { font-size: 1.4rem; margin-bottom: 8px; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; grid-auto-rows: auto; }
-    .card { border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
-    .plc-name { font-weight: 700; margin-bottom: 6px; }
-    .tag-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding: 6px 0; border-top:1px solid #f1f1f1; }
-    .tag-row:first-of-type { border-top: none; }
-    .tag-meta { display:flex; gap:8px; align-items:center; }
-    .controls { display:flex; gap:8px; align-items:center; }
-    .tag-name { font-family: monospace; }
-    .write-input { width:80px; padding:3px 6px; font-size:0.9rem; }
-    .write-btn { padding:4px 8px; }
-    .status { font-size:0.9rem; color:#666; }
-    .page-header { position: sticky; top: 0; background: white; z-index: 10; padding-bottom: 8px; }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* 화면 크기별 기본 폰트 크기 */
+    html { font-size: 15px; }
+    @media (min-width: 768px)  { html { font-size: 16px; } }
+    @media (min-width: 1200px) { html { font-size: 17px; } }
+
+    body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 8px; background: #f5f5f5; }
+
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+
+    /* 헤더 */
+    .page-header {
+      position: sticky; top: 0;
+      background: #fff; z-index: 10;
+      padding: 8px 12px;
+      border-bottom: 1px solid #e0e0e0;
+      margin-bottom: 10px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .status { font-size: 0.9rem; color: #666; white-space: nowrap; }
     #sse-status { font-weight: 600; }
     #sse-status.connected { color: #0066cc; }
     #sse-status.error { color: #cc0000; }
-    .plc-header { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-    .plc-name { font-weight:700; }
-    .conn-badge { font-size:0.75rem; font-weight:600; padding:2px 7px; border-radius:10px; }
-    .conn-badge.online  { background:#d4edda; color:#155724; }
-    .conn-badge.offline { background:#f8d7da; color:#721c24; }
+
+    /* 그리드: 항상 1열 */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    /* 카드 */
+    .card {
+      border: 1px solid #ddd; border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    /* PLC 헤더 (이름 + 연결 배지) */
+    .plc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .plc-name { font-weight: 700; font-size: 1rem; }
+    .conn-badge { font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+    .conn-badge.online  { background: #d4edda; color: #155724; }
+    .conn-badge.offline { background: #f8d7da; color: #721c24; }
+
+    /* 태그 행: 2열 그리드 — 태그(남은 공간) | 컨트롤(필요한 만큼) */
+    .tag-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 16px;
+      padding: 7px 0;
+      border-top: 1px solid #f1f1f1;
+    }
+    .tag-row:first-of-type { border-top: none; }
+
+    .tag-meta { display: flex; gap: 6px; align-items: center; min-width: 0; }
+    .tag-name { font-family: monospace; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tag-type { font-size: 0.8rem; color: #888; white-space: nowrap; }
+    .tag-value { font-size: 0.95rem; white-space: nowrap; }
+
+    /* 컨트롤 (값 + 입력 + 버튼) */
+    .controls { display: flex; gap: 6px; align-items: center; }
+    .write-input {
+      width: 80px; padding: 5px 7px;
+      font-size: 0.9rem; min-height: 34px;
+      border: 1px solid #bbb; border-radius: 4px;
+    }
+    .write-btn {
+      padding: 5px 12px; font-size: 0.9rem;
+      min-height: 34px; white-space: nowrap; cursor: pointer;
+      border: 1px solid #999; border-radius: 4px; background: #f0f0f0;
+    }
+    .write-btn:active { background: #d8d8d8; }
+
+    /* bit 타입 램프 */
+    .bit-lamp {
+      display: inline-block;
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: #ccc;
+      border: 1px solid #aaa;
+    }
+    .bit-lamp.on {
+      background: #22c55e;
+      border-color: #16a34a;
+      box-shadow: 0 0 5px #22c55e;
+      animation: lamp-blink 1s step-start infinite;
+    }
+    @keyframes lamp-blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.15; }
+    }
+
+    /* 모바일 480px 이하: 폰트/입력 축소, 그리드가 1줄 유지 */
+    @media (max-width: 480px) {
+      .tag-row { column-gap: 8px; }
+      .tag-name { font-size: 0.72rem; }
+      .tag-type { font-size: 0.68rem; }
+      .tag-value { font-size: 0.8rem; }
+      .write-input { width: 55px; min-height: 32px; font-size: 0.8rem; padding: 3px 5px; }
+      .write-btn { min-height: 32px; padding: 4px 8px; font-size: 0.8rem; }
+    }
   </style>
 </head>
 <body>
   <header class="page-header">
-    <h1>PLC Dashboard 2 (Grid)</h1>
-    <div class="status">SSE 상태: <span id="sse-status">연결 전</span></div>
+    <h1>PLC Dashboard 2</h1>
+    <div class="status">SSE: <span id="sse-status">연결 전</span></div>
   </header>
   <div class="grid" id="plc-grid"></div>
 
@@ -42,6 +127,17 @@
 
     function encodeId(s) {
       return btoa(unescape(encodeURIComponent(s))).replace(/=+$/, '')
+    }
+
+    function isBitType(tagType) {
+      if (!tagType) return false
+      const t = tagType.toLowerCase()
+      return t === 'bool' || t === 'boolean' || t === 'bit'
+    }
+
+    function setLamp(lamp, value) {
+      const on = value === true || value === 1 || value === '1' || value === 'true' || value === 'True'
+      lamp.className = 'bit-lamp' + (on ? ' on' : '')
     }
 
     function createPlcCard(plcName) {
@@ -79,7 +175,7 @@
       name.className = 'tag-name'
       name.textContent = tag
       const type = document.createElement('div')
-      type.style.color = '#666'
+      type.className = 'tag-type'
       type.id = `type_${encodeId(plcName)}_${encodeId(tag)}`
       type.textContent = `[${entry.tag_type || 'unknown'}]`
       meta.appendChild(name)
@@ -87,7 +183,16 @@
 
       const controls = document.createElement('div')
       controls.className = 'controls'
+
+      if (isBitType(entry.tag_type)) {
+        const lamp = document.createElement('span')
+        lamp.id = `lamp_${encodeId(plcName)}_${encodeId(tag)}`
+        setLamp(lamp, entry.value)
+        controls.appendChild(lamp)
+      }
+
       const val = document.createElement('span')
+      val.className = 'tag-value'
       val.textContent = String(entry.value)
       val.id = `val_${encodeId(plcName)}_${encodeId(tag)}`
 
@@ -114,7 +219,6 @@
       const container = document.getElementById(`container_${encodeId(plcName)}`)
       if (!container) return
 
-      // Track existing rows to remove missing ones later
       const existingRows = new Set()
       Array.from(container.querySelectorAll('.tag-row')).forEach(r => existingRows.add(r.id))
 
@@ -127,20 +231,17 @@
           row = createTagRow(plcName, tag, entry)
           container.appendChild(row)
         } else {
-          // update displayed value and type, but preserve input if focused
           const valSpan = document.getElementById(`val_${encodeId(plcName)}_${encodeId(tag)}`)
           if (valSpan) valSpan.textContent = String(entry.value)
           const typeDiv = document.getElementById(`type_${encodeId(plcName)}_${encodeId(tag)}`)
           if (typeDiv) typeDiv.textContent = `[${entry.tag_type || 'unknown'}]`
+          const lamp = document.getElementById(`lamp_${encodeId(plcName)}_${encodeId(tag)}`)
+          if (lamp) setLamp(lamp, entry.value)
           const input = document.getElementById(`in_${encodeId(plcName)}_${encodeId(tag)}`)
-          if (input && document.activeElement !== input) {
-            // only overwrite input when it's not focused
-            input.value = ''
-          }
+          if (input && document.activeElement !== input) input.value = ''
         }
       }
 
-      // Remove rows that are no longer present
       existingRows.forEach(rid => {
         const el = document.getElementById(rid)
         if (el) el.remove()
@@ -148,7 +249,6 @@
     }
 
     function renderSnapshot(snapshot) {
-      // Add or update cards
       for (const [plcName, plcData] of Object.entries(snapshot || {})) {
         let card = document.getElementById(`card_${encodeId(plcName)}`)
         if (!card) {
@@ -156,7 +256,6 @@
           grid.appendChild(card)
         }
 
-        // Update connected badge
         const badge = document.getElementById(`conn_${encodeId(plcName)}`)
         if (badge) {
           const online = plcData.connected === true
@@ -164,12 +263,10 @@
           badge.className = 'conn-badge ' + (online ? 'online' : 'offline')
         }
 
-        // New structure has .tags sub-object; fall back to whole object for compatibility
         const tags = (plcData && typeof plcData.tags === 'object') ? plcData.tags : plcData
         updatePlcCard(plcName, tags)
       }
 
-      // Remove cards not in snapshot
       Array.from(grid.children).forEach(card => {
         const plcId = card.id && card.id.startsWith('card_') ? card.id.slice(5) : null
         if (plcId && !(Object.keys(snapshot || {}).some(n => encodeId(n) === plcId))) {
@@ -197,31 +294,24 @@
       }
     }
 
-    // SSE
+    function setAllOffline() {
+      document.querySelectorAll('.conn-badge').forEach(badge => {
+        badge.textContent = '연결 안됨'
+        badge.className = 'conn-badge offline'
+      })
+      document.querySelectorAll('.bit-lamp').forEach(lamp => {
+        lamp.className = 'bit-lamp'
+      })
+    }
+
     const es = new EventSource('/sse/plc_data')
-    es.onopen = () => { 
-      sseStatus.textContent = '연결됨'
-      sseStatus.className = 'connected'
-    }
-    es.onerror = () => { 
-      sseStatus.textContent = '에러/연결 끊김'
-      sseStatus.className = 'error'
-    }
+    es.onopen = () => { sseStatus.textContent = '연결됨'; sseStatus.className = 'connected' }
+    es.onerror = () => { sseStatus.textContent = '에러/연결 끊김'; sseStatus.className = 'error'; setAllOffline() }
     es.onmessage = (evt) => {
-      try {
-        const payload = JSON.parse(evt.data)
-        renderSnapshot(payload)
-      } catch (e) {
-        console.error('SSE parse error', e)
-      }
+      try { renderSnapshot(JSON.parse(evt.data)) } catch (e) { console.error('SSE parse error', e) }
     }
 
-    const closeSse = () => {
-      if (es) {
-        es.close()
-      }
-    }
-
+    const closeSse = () => es && es.close()
     window.addEventListener('beforeunload', closeSse)
     window.addEventListener('unload', closeSse)
     window.addEventListener('pagehide', closeSse)
